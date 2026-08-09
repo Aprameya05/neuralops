@@ -60,7 +60,7 @@ Be specific and actionable. Maximum 6 steps. No fluff."""
                 messages=[{"role": "user", "content": task}],
                 system=self.SYSTEM,
                 max_tokens=512,
-                preferred_provider=Provider.CEREBRAS,
+                preferred_provider=Provider.GROQ,
             )
             span.response_text = response.content
             span.attributes["provider"] = response.provider
