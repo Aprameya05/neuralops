@@ -247,3 +247,5 @@ async def drift_alerts(hours: int = 1) -> list:
     return [dict(r) for r in rows]
 from api.metrics import router as metrics_router
 app.include_router(metrics_router)
+from api.search_routes import router as search_router
+app.include_router(search_router)
