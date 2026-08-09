@@ -1,30 +1,27 @@
-version: "3.9"
-
 services:
 
-  # ── Message broker ─────────────────────────────────────────────────────
   kafka:
     image: confluentinc/cp-kafka:7.6.1
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      CLUSTER_ID: "neuralops-local-cluster"
+      CLUSTER_ID: "VR0obFiKTpetOPE9GchI1g"
     ports:
       - "9092:9092"
+      - "29092:29092"
     healthcheck:
       test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
       interval: 10s
       timeout: 5s
       retries: 10
 
-  # ── Columnar trace store ────────────────────────────────────────────────
   clickhouse:
     image: clickhouse/clickhouse-server:24.4
     environment:
@@ -32,8 +29,8 @@ services:
       CLICKHOUSE_USER: neuralops
       CLICKHOUSE_PASSWORD: neuralops
     ports:
-      - "8123:8123"   # HTTP interface
-      - "9000:9000"   # Native protocol
+      - "8123:8123"
+      - "9000:9000"
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./server/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
@@ -43,7 +40,6 @@ services:
       timeout: 3s
       retries: 20
 
-  # ── Operational metadata store ─────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     environment:
@@ -59,7 +55,6 @@ services:
       interval: 5s
       retries: 10
 
-  # ── In-memory cache + pub/sub ──────────────────────────────────────────
   redis:
     image: redis:7.2-alpine
     ports:
@@ -69,63 +64,6 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       retries: 10
-
-  # ── NeuralOps ingestion API ────────────────────────────────────────────
-  api:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
-    environment:
-      KAFKA_BROKERS: kafka:9092
-      KAFKA_TOPIC: neuralops.spans
-      CLICKHOUSE_HOST: clickhouse
-      POSTGRES_URL: postgresql://neuralops:neuralops@postgres:5432/neuralops
-      REDIS_URL: redis://redis:6379/0
-    ports:
-      - "8000:8000"
-    depends_on:
-      kafka:
-        condition: service_healthy
-      clickhouse:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 4
-
-  # ── Kafka consumer → ClickHouse ────────────────────────────────────────
-  consumer:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
-    environment:
-      KAFKA_BROKERS: kafka:9092
-      KAFKA_TOPIC: neuralops.spans
-      KAFKA_GROUP_ID: neuralops-consumer
-      CLICKHOUSE_HOST: clickhouse
-      CLICKHOUSE_USER: neuralops
-      CLICKHOUSE_PASSWORD: neuralops
-    depends_on:
-      kafka:
-        condition: service_healthy
-      clickhouse:
-        condition: service_healthy
-    command: python -m consumers.span_consumer
-
-  # ── Dashboard (Next.js) ────────────────────────────────────────────────
-  dashboard:
-    build:
-      context: ./dashboard
-      dockerfile: Dockerfile
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-      NEXT_PUBLIC_WS_URL: ws://localhost:8000
-      CLICKHOUSE_HTTP_URL: http://clickhouse:8123
-      CLICKHOUSE_USER: neuralops
-      CLICKHOUSE_PASSWORD: neuralops
-    ports:
-      - "3000:3000"
-    depends_on:
-      - api
 
 volumes:
   clickhouse_data:

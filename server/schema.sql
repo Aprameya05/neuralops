@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS neuralops.spans
 
     -- LLM-specific (nullable for non-LLM spans)
     model               Nullable(String),
-    provider            Nullable(LowCardinality(String)),
+    provider            LowCardinality(String) DEFAULT '',
     prompt_tokens       Nullable(UInt32),
     completion_tokens   Nullable(UInt32),
     total_tokens        Nullable(UInt32),
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS neuralops.spans
     faithfulness_score  Nullable(Float32),
 
     -- Tool-specific (nullable for non-tool spans)
-    tool_name           Nullable(LowCardinality(String)),
+    tool_name           LowCardinality(String) DEFAULT '',
     autonomous          Nullable(UInt8),
 
     -- Free-form attributes as JSON string

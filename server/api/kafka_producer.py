@@ -27,7 +27,7 @@ class KafkaProducerClient:
         self._producer = AIOKafkaProducer(
             bootstrap_servers=self._brokers,
             value_serializer=lambda v: json.dumps(v, default=str).encode(),
-            compression_type="lz4",
+            compression_type="gzip",
             linger_ms=10,        # small batching window — reduces overhead
             max_batch_size=16384,
             request_timeout_ms=10_000,

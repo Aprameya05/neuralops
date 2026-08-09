@@ -26,7 +26,7 @@ from clickhouse_driver import Client as CHClient
 
 log = structlog.get_logger(__name__)
 
-KAFKA_BROKERS   = os.environ.get("KAFKA_BROKERS", "localhost:9092")
+KAFKA_BROKERS   = os.environ.get("KAFKA_BROKERS", "localhost:29092")
 KAFKA_TOPIC     = os.environ.get("KAFKA_TOPIC", "neuralops.spans")
 KAFKA_GROUP_ID  = os.environ.get("KAFKA_GROUP_ID", "neuralops-consumer")
 CH_HOST         = os.environ.get("CLICKHOUSE_HOST", "localhost")
@@ -63,40 +63,38 @@ def _parse_dt(value: Any) -> datetime | None:
     except Exception:
         return None
 
-
 def _span_to_row(raw: dict[str, Any]) -> tuple:
     """Convert raw span dict (from Kafka) to a ClickHouse insert row tuple."""
     cost = raw.get("cost") or {}
     return (
-        raw.get("span_id", ""),
-        raw.get("trace_id", ""),
-        raw.get("parent_span_id"),
-        raw.get("causal_chain_id", ""),
-        raw.get("agent_id", "unknown"),
-        raw.get("agent_framework", "unknown"),
-        raw.get("service_name", "unknown"),
-        raw.get("operation_name", "unknown"),
+        raw.get("span_id") or "",
+        raw.get("trace_id") or "",
+        raw.get("parent_span_id") or "",
+        raw.get("causal_chain_id") or "",
+        raw.get("agent_id") or "unknown",
+        raw.get("agent_framework") or "unknown",
+        raw.get("service_name") or "unknown",
+        raw.get("operation_name") or "unknown",
         _parse_dt(raw.get("started_at")) or datetime.utcnow(),
         _parse_dt(raw.get("ended_at")),
         raw.get("duration_ms"),
-        raw.get("status", "ok"),
-        raw.get("error_message"),
-        raw.get("model"),
-        raw.get("provider") or (cost.get("provider") if cost else None),
+        raw.get("status") or "ok",
+        raw.get("error_message") or "",
+        raw.get("model") or "",
+        raw.get("provider") or (cost.get("provider") if cost else "") or "",
         cost.get("prompt_tokens") if cost else None,
         cost.get("completion_tokens") if cost else None,
         cost.get("total_tokens") if cost else None,
         cost.get("estimated_usd") if cost else None,
         raw.get("hallucination_score"),
         raw.get("faithfulness_score"),
-        raw.get("tool_name"),
+        raw.get("tool_name") or "",
         int(raw.get("autonomous", True)),
         json.dumps(raw.get("attributes") or {}),
         datetime.utcnow(),
-        raw.get("_client_ip"),
-        int(time.time() * 1000),  # _version for ReplacingMergeTree dedup
+        raw.get("_client_ip") or "",
+        int(time.time() * 1000),
     )
-
 
 class SpanConsumer:
     def __init__(self) -> None:
@@ -202,11 +200,6 @@ class SpanConsumer:
 
 async def main() -> None:
     consumer = SpanConsumer()
-
-    loop = asyncio.get_event_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, consumer.stop)
-
     await consumer.run()
 
 
