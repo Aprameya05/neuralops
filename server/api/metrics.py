@@ -21,7 +21,7 @@ Usage:
     Scrape with Prometheus:
         - job_name: neuralops
           static_configs:
-            - targets: ['neuralops-api-cmgf.onrender.com']
+            - targets: ['neuralops-api-cmgf.onrender.com']  # set to your actual Render URL
           metrics_path: /metrics
 """
 

@@ -17,7 +17,7 @@ Usage:
 
     # In SDK init:
     neuralops.init(
-        endpoint="https://neuralops-api-cmgf.onrender.com",
+        endpoint=os.environ.get("NEURALOPS_ENDPOINT", "https://neuralops-api-cmgf.onrender.com"),
         api_key="neuralops-sk-xxxx",
         service="my-agent",
     )

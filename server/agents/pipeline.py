@@ -241,7 +241,7 @@ async def main() -> None:
     print("\nCRITIQUE:")
     print(result.critique["raw"])
     print(f"\nCausal chain ID: {result.causal_chain_id}")
-    print(f"Dashboard: http://localhost:3000/replay/{result.causal_chain_id}")
+    print(f"Dashboard: https://neuralops.pages.dev/replay/{result.causal_chain_id}")
 
 
 if __name__ == "__main__":
