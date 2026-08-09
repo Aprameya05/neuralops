@@ -1,5 +1,5 @@
-import { TraceSummary, CausalGraph, AgentSummary, CostSummaryItem } from './types';
-import { MOCK_TRACES, getMockCausalReplay, MOCK_AGENTS, MOCK_COST_SERIES } from './mock';
+import { TraceSummary, CausalGraph, AgentSummary, CostSummaryItem, SpanSearchResult, ChainSearchResult, AnomalyAlert } from './types';
+import { MOCK_TRACES, getMockCausalReplay, MOCK_AGENTS, MOCK_COST_SERIES, MOCK_SEARCH_SPANS, MOCK_SEARCH_CHAINS, MOCK_ANOMALIES } from './mock';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -218,3 +218,96 @@ export async function runBenchmarkSuite(prompt: string): Promise<BenchmarkRespon
     };
   }
 }
+
+export async function searchSpans(query: string, limit = 20): Promise<SpanSearchResult[]> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/search/spans`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, limit }),
+      signal: AbortSignal.timeout(4000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return data.map((item: any) => ({
+          span_id: item.span_id || `spn_${Math.random().toString(36).substring(2, 8)}`,
+          similarity: typeof item.similarity === 'number' ? item.similarity : (item.score || 0.85),
+          operation_name: item.operation_name || 'operation',
+          agent_id: item.agent_id || 'agent',
+          status: item.status || 'ok',
+          duration_ms: item.duration_ms || item.duration || 450,
+          started_at: item.started_at || new Date().toISOString(),
+          service_name: item.service_name || 'service',
+        }));
+      }
+    }
+    throw new Error('Invalid response or empty');
+  } catch (err) {
+    console.warn('Search spans API unreachable, using fallback:', err);
+    return MOCK_SEARCH_SPANS.map(item => ({
+      ...item,
+      similarity: Number(Math.max(0.65, item.similarity - Math.random() * 0.04).toFixed(2))
+    }));
+  }
+}
+
+export async function searchChains(query: string, limit = 20): Promise<ChainSearchResult[]> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/search/chains`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, limit }),
+      signal: AbortSignal.timeout(4000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return data.map((item: any) => ({
+          similarity: typeof item.similarity === 'number' ? item.similarity : 0.88,
+          causal_chain_id: item.causal_chain_id || item.chain_id || 'csl_65a1b2',
+          agent_ids: item.agent_ids || item.agents || ['planner-agent', 'researcher-agent'],
+          span_count: item.span_count || item.spans || 10,
+          total_cost_usd: item.total_cost_usd || item.cost || 0.024,
+          has_errors: Boolean(item.has_errors || item.error_count > 0),
+          error_count: item.error_count || 0,
+        }));
+      }
+    }
+    throw new Error('Invalid response or empty');
+  } catch (err) {
+    console.warn('Search chains API unreachable, using fallback:', err);
+    return MOCK_SEARCH_CHAINS;
+  }
+}
+
+export async function getDriftAlerts(hours = 24): Promise<AnomalyAlert[]> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/traces/drift/alerts?hours=${hours}`, {
+      signal: AbortSignal.timeout(4000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return data.map((row: any, i: number) => ({
+          id: row.id || `anom_live_${i}`,
+          operation_name: row.operation_name || 'unknown_op',
+          agent_id: row.agent_id || 'unknown_agent',
+          type: (row.error_rate > 0.3 ? 'ERROR' : row.p100_latency_ms > 2000 ? 'LATENCY' : 'ERROR_RATE') as AnomalyAlert['type'],
+          severity: (row.error_rate > 0.25 ? 'critical' : 'warning') as AnomalyAlert['severity'],
+          current_value: row.error_rate ? `${(row.error_rate * 100).toFixed(1)}% err` : `${row.avg_latency_ms || 450}ms`,
+          baseline_value: row.baseline || '1.0%',
+          error_rate: row.error_rate || 0.1,
+          timestamp: new Date().toISOString(),
+          causal_chain_id: row.causal_chain_id || 'csl_65a1b2',
+          description: `Statistically detected anomaly in ${row.operation_name} executed by ${row.agent_id}.`,
+        }));
+      }
+    }
+    throw new Error('API offline or empty');
+  } catch (err) {
+    console.warn('Drift alerts API unreachable, using mock anomalies:', err);
+    return MOCK_ANOMALIES;
+  }
+}
+

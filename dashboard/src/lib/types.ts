@@ -94,3 +94,40 @@ export interface LiveAlert {
   timestamp: string;
   message?: string;
 }
+
+export interface SpanSearchResult {
+  span_id: string;
+  similarity: number;
+  operation_name: string;
+  agent_id: string;
+  status: SpanStatus;
+  duration_ms: number;
+  started_at: string;
+  service_name?: string;
+}
+
+export interface ChainSearchResult {
+  similarity: number;
+  causal_chain_id: string;
+  agent_ids: string[];
+  span_count: number;
+  total_cost_usd: number;
+  has_errors: boolean;
+  error_count?: number;
+}
+
+export interface AnomalyAlert {
+  id: string;
+  operation_name: string;
+  agent_id: string;
+  type: 'ERROR' | 'LATENCY' | 'COST' | 'ERROR_RATE';
+  severity: 'critical' | 'warning' | 'info';
+  current_value: string;
+  baseline_value: string;
+  error_rate: number;
+  timestamp: string;
+  causal_chain_id: string;
+  description?: string;
+  latency_series?: Array<{ time: string; latency_ms: number; baseline_ms: number }>;
+}
+
