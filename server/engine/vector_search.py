@@ -46,21 +46,6 @@ async def _get_pool() -> asyncpg.Pool:
 # ── Embedding generation ───────────────────────────────────────────────────
 
 async def embed_text(text: str) -> list[float]:
-    """
-    Generate a text embedding.
-
-    Primary: Groq text embedding API (free tier)
-    Fallback: deterministic hash-based pseudo-embedding (no API needed)
-
-    The fallback is not semantically meaningful but maintains the pipeline
-    and allows the system to work without an embedding API.
-    """
-    if GROQ_API_KEY:
-        try:
-            return await _embed_via_groq(text)
-        except Exception as exc:
-            log.warning("vector.embed_groq_failed", error=str(exc))
-
     return _hash_embed(text)
 
 
