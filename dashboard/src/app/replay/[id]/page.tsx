@@ -1,8 +1,3 @@
-export const dynamic = 'force-static'
-
-export function generateStaticParams() {
-  return []
-}
 'use client';
 
 import React, { useState, useEffect } from 'react';
