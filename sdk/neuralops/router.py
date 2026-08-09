@@ -60,13 +60,12 @@ PROVIDERS: list[ProviderConfig] = [
         api_key_env="MISTRAL_API_KEY",
         model="mistral-small-latest",    # free tier
     ),
-       ProviderConfig(
-            name=Provider.GEMINI,
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-            api_key_env="GEMINI_API_KEY",
-            model="gemini-2.0-flash",        # free tier, 1500 RPD
-        ),
-        
+      # ProviderConfig(
+#     name=Provider.GEMINI,
+#     base_url="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+#     api_key_env="GEMINI_API_KEY",
+#     model="gemini-2.0-flash",
+# ),
     ProviderConfig(
         name=Provider.OPENROUTER,
         base_url="https://openrouter.ai/api/v1/chat/completions",
