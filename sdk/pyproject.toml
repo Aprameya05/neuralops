@@ -1,9 +1,9 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
-name = "neuralops-sdk"
+name = "neuralops-observability"
 version = "0.1.0"
 description = "Universal AI agent observability SDK — trace, cost, drift, causal replay"
 readme = "README.md"
