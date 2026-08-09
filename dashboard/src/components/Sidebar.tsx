@@ -14,17 +14,21 @@ import {
   Bot,
   Bell,
   Layers,
+  Search,
+  AlertTriangle,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Overview', icon: LayoutDashboard },
+  { href: '/search', label: 'Search', icon: Search },
   { href: '/traces', label: 'Traces', icon: GitBranch },
   { href: '/replay/csl_65a1b2', label: 'Replay', icon: Play },
+  { href: '/anomalies', label: 'Anomalies', icon: AlertTriangle },
   { href: '/playground', label: 'Playground', icon: Terminal },
   { href: '/arena', label: 'Arena', icon: Trophy },
   { href: '/cost', label: 'Cost', icon: DollarSign },
   { href: '/agents', label: 'Agents', icon: Bot },
-  { href: '/alerts', label: 'Alerts', icon: Bell },
+  { href: '/alerts-config', label: 'Alert Config', icon: Bell },
 ];
 
 export default function Sidebar() {
