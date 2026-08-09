@@ -1,10 +1,16 @@
 <div align="center">
 
-<img src="https://img.shields.io/badge/NeuralOps-v0.1.0-6366f1?style=for-the-badge&labelColor=0a0a0a" alt="version"/>
+<a href="https://neuralops.pages.dev">
+<img src="https://img.shields.io/badge/Live_Demo-neuralops.pages.dev-6366f1?style=for-the-badge&labelColor=0a0a0a" alt="live demo"/>
+</a>
+&nbsp;
 <img src="https://img.shields.io/github/actions/workflow/status/Aprameya05/neuralops/benchmark.yml?style=for-the-badge&label=Benchmark+CI&labelColor=0a0a0a&color=10b981" alt="CI"/>
+&nbsp;
+<img src="https://img.shields.io/badge/NeuralOps-v0.1.0-6366f1?style=for-the-badge&labelColor=0a0a0a" alt="version"/>
+&nbsp;
 <img src="https://img.shields.io/badge/License-Apache_2.0-6366f1?style=for-the-badge&labelColor=0a0a0a" alt="license"/>
+&nbsp;
 <img src="https://img.shields.io/badge/Python-3.10+-6366f1?style=for-the-badge&labelColor=0a0a0a" alt="python"/>
-<img src="https://img.shields.io/badge/Free_LLMs-Groq_Mistral_OpenRouter-10b981?style=for-the-badge&labelColor=0a0a0a" alt="llms"/>
 
 <br/><br/>
 
@@ -17,15 +23,14 @@
  ╚═╝  ╚═══╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝     ╚══════╝
 ```
 
-### AI Agent Observability Platform
+**AI Agent Observability Platform**
 
-**The missing infrastructure layer between your AI agents and production.**
 Real-time tracing. Causal decision replay. Cost attribution. Multi-LLM benchmarking.
 Self-hosted. Open source. Zero vendor lock-in.
 
 <br/>
 
-[**Quickstart**](#quickstart) &nbsp;|&nbsp; [**Architecture**](#architecture) &nbsp;|&nbsp; [**SDK**](#sdk) &nbsp;|&nbsp; [**Dashboard**](#dashboard) &nbsp;|&nbsp; [**Benchmark Arena**](#benchmark-arena)
+[**Live Demo**](https://neuralops.pages.dev) &nbsp;|&nbsp; [**Quickstart**](#quickstart) &nbsp;|&nbsp; [**Architecture**](#architecture) &nbsp;|&nbsp; [**SDK**](#sdk) &nbsp;|&nbsp; [**Benchmark Arena**](#benchmark-arena) &nbsp;|&nbsp; [**Dashboard**](#dashboard)
 
 </div>
 
@@ -54,16 +59,17 @@ NeuralOps closes that gap.
 | Capability | Datadog | Langfuse | NeuralOps |
 |---|---|---|---|
 | Span tracing | Yes | Yes | Yes |
-| Token cost | Yes | Yes | Yes |
+| Token cost attribution | Yes | Yes | Yes |
 | Causal chain across agent hops | No | No | **Yes** |
 | Decision replay | No | Partial | **Yes** |
 | Real-time drift detection | Yes | No | **Yes** |
 | LLM-as-judge eval | No | Yes | **Yes** |
 | Multi-LLM benchmark arena | No | No | **Yes** |
+| Built-in real AI agents | No | No | **Yes** |
 | Self-hosted, open source | No | Yes | **Yes** |
 | Built-in free LLM router | No | No | **Yes** |
 
-The key innovation is the `causal_chain_id` — a UUID that travels across every agent hop, tool call, and service boundary. When Agent A delegates to Agent B which calls a tool which hits an LLM, every span shares one chain ID. The full decision tree is queryable in a single ClickHouse scan.
+The core innovation is the `causal_chain_id` — a UUID that travels across every agent hop, tool call, and service boundary. When Agent A delegates to Agent B which calls a tool which hits an LLM, every span shares one chain ID. The full decision tree is queryable in a single ClickHouse scan.
 
 ---
 
@@ -72,15 +78,15 @@ The key innovation is the `causal_chain_id` — a UUID that travels across every
 ```
 Agents (LangGraph / CrewAI / AutoGen / custom)
          |
-         | OpenTelemetry SDK (3 lines to instrument)
+         | NeuralOps SDK (3 lines to instrument)
          v
  +------------------+
- |  FastAPI /ingest |  <-- receives span batches
+ |  FastAPI /ingest |  receives span batches, validates, enriches
  +------------------+
          |
          v
  +---------------+
- |     Kafka     |  <-- async span streaming, lz4 compressed
+ |     Kafka     |  async span streaming, gzip compressed, at-least-once
  +---------------+
          |
     +----+----+
@@ -91,69 +97,76 @@ Agents (LangGraph / CrewAI / AutoGen / custom)
 +----------+  +------------------+
     |
     v
-+------------------+
-| Next.js Dashboard|
-| Trace explorer   |
-| Causal replay    |
-| Cost heatmap     |
-| Benchmark arena  |
-| Drift alerts     |
-+------------------+
++----------------------+
+|   Next.js Dashboard  |
+|   neuralops.pages.dev|
+|                      |
+|  Overview            |
+|  Trace Explorer      |
+|  Causal Replay       |
+|  Cost Analysis       |
+|  Agent Registry      |
+|  Benchmark Arena     |
+|  Agent Playground    |
++----------------------+
 ```
 
 **Stack:**
 
 ```
-Python SDK      OpenTelemetry instrumentation, async batching exporter
+Python SDK      OpenTelemetry instrumentation, async batching exporter, Welford drift
 FastAPI         Ingestion API, agent routes, WebSocket alerts
-Kafka (KRaft)   Span streaming, lz4 compression, at-least-once delivery
-ClickHouse      Columnar trace store, materialized views, fast scans
+Kafka (KRaft)   Span streaming, gzip compression, at-least-once delivery
+ClickHouse      Columnar trace store, materialized views, sub-second scans
 PostgreSQL      Eval results, agent metadata, configuration
 Redis           Live state, WebSocket pub/sub, rate tracking
-Next.js 14      Dashboard, App Router, TypeScript, Framer Motion
+Next.js 14      Dashboard, App Router, TypeScript, Framer Motion, animated canvas
 Docker Compose  One-command local deployment
-GitHub Actions  Benchmark CI on every push
+GitHub Actions  Benchmark CI runs on every push, posts leaderboard to job summary
+Cloudflare      Global CDN deployment at neuralops.pages.dev
 ```
 
 ---
 
 ## Quickstart
 
-**Prerequisites:** Docker, Python 3.10+, Node.js 18+
+**Prerequisites:** Docker, Python 3.10+
 
 ```bash
 # 1. Clone
 git clone https://github.com/Aprameya05/neuralops
 cd neuralops
 
-# 2. Start the full stack
-docker compose up -d
+# 2. Add your free API keys (no credit card needed)
+cp .env.example .env
+# Edit .env with your Groq, Mistral, OpenRouter keys
 
-# 3. Install SDK
+# 3. Start infrastructure
+docker compose up -d kafka clickhouse postgres redis
+
+# 4. Start the API server
+cd server && pip install -r requirements.txt
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+# 5. Start the Kafka consumer
+python -m server.consumers.span_consumer
+
+# 6. Install SDK and run example agent
 pip install -e ./sdk
+python examples/example_agent.py
 
-# 4. Instrument your agent
-import neuralops
-neuralops.init(endpoint="http://localhost:8000", service="my-agent")
-
-@neuralops.trace("plan_step")
-async def plan(query: str) -> str:
-    async with neuralops.trace_llm_call("gpt-4o", user_prompt=query) as span:
-        response = await your_llm_client(query)
-        span.response_text = response
-    return response
-
-# 5. Open dashboard
-open http://localhost:3000
+# 7. Open dashboard
+open https://neuralops.pages.dev
+# or run locally: cd dashboard && npm install && npm run dev
 ```
 
-Every call is traced. Every LLM call has cost attribution. Every error is replayable.
+Every call is traced. Every LLM call has cost attribution. Every error is replayable by causal chain ID.
 
 ---
 
 ## SDK
 
-The SDK is a single pip install. It wraps any agent framework with zero changes to your business logic.
+Drop-in instrumentation for any agent framework. Three lines to start, zero changes to business logic.
 
 ### Initialize
 
@@ -173,11 +186,10 @@ ctx = neuralops.init(
 ```python
 @neuralops.trace("retrieve_context")
 async def retrieve(query: str) -> list[str]:
-    # your code unchanged
-    return results
+    return results  # your code unchanged
 ```
 
-### Trace LLM calls with cost
+### Trace LLM calls with automatic cost attribution
 
 ```python
 async with neuralops.trace_llm_call(
@@ -201,19 +213,17 @@ async with neuralops.trace_tool_call("web_search", {"query": q}) as span:
 ### Propagate causal context across service boundaries
 
 ```python
-# Agent A spawns Agent B
+# Agent A spawns Agent B across a network boundary
 child_ctx = ctx.child(agent_id="sub-agent-01", framework="crewai")
-headers = child_ctx.to_headers()
+headers = child_ctx.to_headers()  # serialize to HTTP headers
 
-# Agent B receives the context
+# Agent B reconstructs context on the other side
 ctx = AgentContext.from_headers(request.headers)
 ```
 
-All spans from both agents share the same `causal_chain_id`. The full multi-hop decision tree is queryable in one scan.
+Every span from both agents shares `causal_chain_id`. The full multi-hop decision tree is one ClickHouse query away.
 
-### Cost estimation
-
-Supports 15 models. No external API call at runtime.
+### Cost estimation — 15 models, no API call at runtime
 
 ```python
 cost = neuralops.estimate_cost(
@@ -221,14 +231,12 @@ cost = neuralops.estimate_cost(
     prompt_tokens=1200,
     completion_tokens=340,
 )
-# CostAttribution(model='claude-sonnet-4-6', estimated_usd=0.0000087)
+# CostAttribution(model='claude-sonnet-4-6', estimated_usd=0.00000870)
 ```
 
-Supported: GPT-4o, GPT-4o-mini, Claude Opus/Sonnet/Haiku, Gemini 1.5 Pro/Flash, Llama 3 70B/8B, Mistral Large/Small.
+Supported: GPT-4o, GPT-4o-mini, GPT-4, Claude Opus/Sonnet/Haiku, Gemini 1.5 Pro/Flash, Llama 3 70B/8B, Mistral Large/Small.
 
-### Drift detection
-
-Real-time statistical anomaly detection using Welford's online algorithm. No training data required.
+### Drift detection — no training data required
 
 ```python
 detector = neuralops.DriftDetector(agent_id="planner")
@@ -239,61 +247,17 @@ for alert in alerts:
     print(alert.drift_type)   # LATENCY / COST / ERROR_RATE
     print(alert.severity)     # warning / critical
     print(alert.z_score)      # 4.2
-    print(alert.message)      # "plan_step latency 8100ms is 4.2s from baseline 1200ms"
+    print(alert.message)
+    # "plan_step latency 8100ms is 4.2 standard deviations from baseline 1200ms"
 ```
+
+Uses Welford's online algorithm — numerically stable, no training window, starts alerting from the 10th observation.
 
 ---
 
-## Dashboard
+## Real AI Agents
 
-Seven pages, all dark theme, all real-time.
-
-**Overview** — stat cards, spans-per-minute area chart, cost-by-agent bar chart, recent traces table with live WebSocket feed.
-
-**Trace Explorer** — search and filter by agent, status, time range. Click any row to replay.
-
-**Causal Replay** — the core page. Left panel: visual tree of every span colored by type (LLM=indigo, tool=violet, error=red). Right panel: full telemetry for the selected node including prompt, response, hallucination score, tool I/O.
-
-**Cost Analysis** — hourly USD spend per agent and model. Sortable attribution table.
-
-**Agent Registry** — one card per agent with framework badge, error rate bar, last seen timestamp.
-
-**Benchmark Arena** — run any prompt across all providers. Ranked leaderboard with quality scores and actual responses side by side.
-
-**Playground** — type a task, run the 3-agent pipeline, watch spans appear live as each agent completes.
-
----
-
-## Benchmark Arena
-
-Run the same prompt across providers simultaneously. Each response is scored by an LLM judge on accuracy, clarity, and completeness.
-
-```python
-from server.agents.benchmark import BenchmarkArena
-
-arena = BenchmarkArena()
-result = await arena.run("Explain the CAP theorem in one sentence.")
-print(result.summary())
-```
-
-```
-Benchmark: Explain the CAP theorem in one sentence.
-Provider       Model                        Quality    Latency    Cost
-----------------------------------------------------------------------
-MISTRAL        mistral-small-latest          10.0/10    1758ms    FREE
-GROQ           llama-3.3-70b-versatile       10.0/10    1811ms    FREE
-OPENROUTER     openai/gpt-oss-20b:free       10.0/10   14744ms    FREE
-
-Winner: MISTRAL
-```
-
-Benchmark CI runs on every push and posts results to the GitHub Actions job summary.
-
----
-
-## Multi-Agent Pipeline
-
-Three real agents, each using a different free LLM provider.
+NeuralOps ships with three real working agents backed by free LLM APIs. Run them out of the box.
 
 ```python
 from server.agents.pipeline import run_full_pipeline
@@ -302,17 +266,19 @@ result = await run_full_pipeline(
     "What makes a great distributed systems engineer?"
 )
 
-print(result.plan)              # Planner output (Groq, llama-3.3-70b)
-print(result.research)          # Researcher output (Mistral)
-print(result.critique)          # Critic score and feedback
-print(result.causal_chain_id)   # replay at /replay/<id>
+print(result.plan)             # Planner (Groq, llama-3.3-70b)
+print(result.research)         # Researcher (Mistral)
+print(result.critique)         # Critic score + structured feedback
+print(result.causal_chain_id)  # replay at neuralops.pages.dev/replay/<id>
 ```
+
+Every call is traced. The 3-agent run produces 6 spans linked under one `causal_chain_id`, replayable in the dashboard.
 
 ---
 
 ## Free LLM Router
 
-Selects the best available free provider and falls back on rate limits automatically.
+Auto-selects the best available free provider. Falls back instantly on rate limits. Zero billing risk.
 
 ```python
 from neuralops import router
@@ -327,8 +293,83 @@ print(response.latency_ms)      # 476
 print(response.fallback_count)  # 0
 ```
 
-Provider priority: Groq (100K tokens/day) → Mistral (free tier) → OpenRouter (:free models).
-All OpenRouter calls use the `:free` suffix. It is not possible to incur charges.
+**Provider priority:** Groq (100K tokens/day, llama-3.3-70b) → Mistral (free tier) → OpenRouter (:free suffix enforced)
+
+All OpenRouter calls use the `:free` model suffix. Billing is structurally impossible.
+
+---
+
+## Benchmark Arena
+
+Run the same prompt across all providers in parallel. Score each response with an LLM judge. Rank by quality, latency, and cost.
+
+```python
+from server.agents.benchmark import BenchmarkArena
+
+arena = BenchmarkArena()
+result = await arena.run("Explain the CAP theorem in one sentence.")
+print(result.summary())
+```
+
+**Actual output from a real run:**
+
+```
+Benchmark: Explain the CAP theorem in one sentence.
+
+Provider       Model                        Quality    Latency    Cost
+----------------------------------------------------------------------
+MISTRAL        mistral-small-latest          10.0/10    1758ms    FREE
+GROQ           llama-3.3-70b-versatile       10.0/10    1811ms    FREE
+OPENROUTER     openai/gpt-oss-20b:free       10.0/10   14744ms    FREE
+
+Winner: MISTRAL
+```
+
+Benchmark CI runs automatically on every push to `main` via GitHub Actions. Results post to the job summary. Every provider is tested on 3 prompts. The build fails if fewer than 30% of providers succeed.
+
+---
+
+## Dashboard
+
+Live at **[neuralops.pages.dev](https://neuralops.pages.dev)** — deployed on Cloudflare's global CDN, auto-deploys on every push to `main`.
+
+**Overview** — stat cards with animated count-up (total spans, cost, active agents, error rate), spans-per-minute area chart, cost-by-agent bar chart, recent traces table with live WebSocket feed and drift alert toasts.
+
+**Trace Explorer** — search and filter by agent ID, status, time range. Click any row to open causal replay.
+
+**Causal Replay** — the core page. Left panel: visual tree of every span in the causal chain, colored by type (LLM=indigo, tool=violet, error=red), indented by parent-child relationship. Right panel: click any node for full telemetry — prompt, response, hallucination score, tool I/O, cost breakdown.
+
+**Cost Analysis** — hourly USD spend per agent and model. Sortable attribution table with time range selector (1h, 6h, 24h, 7d).
+
+**Agent Registry** — one card per agent with framework badge, error rate progress bar, avg latency, last seen timestamp.
+
+**Benchmark Arena** — run any prompt from the UI, watch all providers respond in parallel, see the ranked leaderboard with quality scores and full response text.
+
+**Agent Playground** — type a task, hit run, watch the 3-agent pipeline execute live with span-by-span updates.
+
+---
+
+## GitHub Actions CI
+
+Two workflows run on every push to `main`.
+
+**Benchmark CI** (`benchmark.yml`) — runs the arena on 3 prompts across all configured providers. Posts a formatted leaderboard table to the GitHub Actions job summary. Uploads results as artifacts. Fails the build if fewer than 30% of providers succeed.
+
+**Lint CI** (`ci.yml`) — checks imports and code style across the SDK and server. Runs in under 30 seconds.
+
+Both are visible at [github.com/Aprameya05/neuralops/actions](https://github.com/Aprameya05/neuralops/actions).
+
+---
+
+## Signals detected
+
+**Latency drift** — Welford's online algorithm maintains a running mean and variance per operation with no training window. Fires a warning at 2.5 standard deviations and critical at 4.0. Works from the 10th observation onward.
+
+**Cost spikes** — exponential moving average on USD per LLM call. Fires when a call exceeds 3x the EMA. Catches prompt injection attacks that inflate token counts silently.
+
+**Error rate drift** — 50-span sliding window per operation. Fires when error rate exceeds 15%.
+
+**Hallucination** — LLM-as-judge scores every LLM span asynchronously using a fast cheap model. Scores are written back to ClickHouse and visible in causal replay.
 
 ---
 
@@ -337,7 +378,7 @@ All OpenRouter calls use the `:free` suffix. It is not possible to incur charges
 ```
 neuralops/
 |
-+-- sdk/                           Python SDK
++-- sdk/                           Python SDK (pip install -e ./sdk)
 |   +-- neuralops/
 |       +-- tracer.py              @trace, trace_llm_call, trace_tool_call
 |       +-- context.py             AgentContext, causal_chain_id propagation
@@ -345,93 +386,61 @@ neuralops/
 |       +-- drift.py               Welford z-score, EMA, sliding window
 |       +-- exporter.py            Async batching, retry, backpressure
 |       +-- router.py              Multi-LLM router, auto-fallback
-|       +-- models.py              Span, LLMCallSpan, ToolCallSpan
+|       +-- models.py              Span, LLMCallSpan, ToolCallSpan (Pydantic v2)
 |
 +-- server/
 |   +-- api/
-|       +-- main.py                FastAPI app
-|       +-- agent_routes.py        POST /v1/agents/run and /benchmark
+|       +-- main.py                FastAPI app, CORS, lifespan
+|       +-- agent_routes.py        POST /v1/agents/run and /v1/agents/benchmark
 |       +-- routes.py              GET /v1/traces, /cost, /drift, /agents
-|       +-- kafka_producer.py      Async aiokafka producer
-|       +-- websocket_manager.py   WebSocket fan-out
+|       +-- kafka_producer.py      Async aiokafka producer, gzip compression
+|       +-- websocket_manager.py   WebSocket fan-out to dashboard clients
 |   +-- agents/
 |       +-- pipeline.py            PlannerAgent, ResearcherAgent, CriticAgent
-|       +-- benchmark.py           BenchmarkArena, parallel provider calls
+|       +-- benchmark.py           BenchmarkArena, parallel provider calls, LLM scoring
 |   +-- consumers/
-|       +-- span_consumer.py       Kafka to ClickHouse, Redis pub/sub
+|       +-- span_consumer.py       Kafka to ClickHouse, Redis pub/sub, batch inserts
 |   +-- engine/
-|       +-- causal_stitcher.py     Causal graph from spans
-|       +-- eval_pipeline.py       LLM-as-judge, async scoring
+|       +-- causal_stitcher.py     Assembles causal graph from spans
+|       +-- eval_pipeline.py       LLM-as-judge async scoring, ClickHouse write-back
 |   +-- schema.sql                 ClickHouse DDL, materialized views
 |
-+-- dashboard/                     Next.js 14, TypeScript, Framer Motion
++-- dashboard/                     Next.js 14, TypeScript, Framer Motion, Recharts
+|                                   Live at neuralops.pages.dev
++-- notebooks/
+|   +-- neuralops_a100.ipynb       Colab A100 notebook: vLLM + Llama 3.1 70B
 +-- .github/workflows/
-|   +-- benchmark.yml              Benchmark CI, PR comments, artifacts
+|   +-- benchmark.yml              Benchmark CI, artifacts, job summary
 |   +-- ci.yml                     Lint and import checks
-+-- docker-compose.yml             Full stack one-command deploy
++-- docker-compose.yml             Kafka, ClickHouse, Postgres, Redis
++-- examples/
+    +-- example_agent.py           Full working example with SDK instrumentation
 ```
 
 ---
 
-## CI
-
-Every push to `main` runs two workflows.
-
-**Benchmark CI** runs the arena across 3 prompts and all providers. Results post to the GitHub Actions job summary. Fails if fewer than 30% of providers succeed.
-
-**Lint CI** checks imports and code style across the SDK and server.
-
-Both complete in under 2 minutes.
-
----
-
-## Signals detected
-
-**Latency drift** — Welford online algorithm tracks running mean and variance per operation. Fires at 2.5 standard deviations (warning) and 4.0 (critical). Works from the 10th observation onward.
-
-**Cost spikes** — EMA on USD per call. Fires when a call exceeds 3x the moving average. Catches prompt injection attacks that inflate token counts.
-
-**Error rate drift** — 50-span sliding window. Fires when error rate exceeds 15%.
-
-**Hallucination** — LLM-as-judge scores every LLM span asynchronously. Scores written back to ClickHouse and visible in the dashboard.
-
----
-
-## Local development
+## Environment Variables
 
 ```bash
-# Infrastructure only
-docker compose up kafka clickhouse postgres redis -d
-
-# API server
-cd server && pip install -r requirements.txt
-uvicorn api.main:app --reload --port 8000
-
-# Kafka consumer
-python -m consumers.span_consumer
-
-# Dashboard
-cd dashboard && npm install && npm run dev
-
-# Example agent
-cd sdk && pip install -r requirements.txt
-python ../examples/example_agent.py
-```
-
----
-
-## Environment variables
-
-```bash
+# Free LLM providers (no credit card required)
 GROQ_API_KEY=gsk_...
 MISTRAL_API_KEY=...
 OPENROUTER_API_KEY=sk-or-v1-...
 
-KAFKA_BROKERS=localhost:9092
+# Infrastructure (defaults match Docker Compose)
+KAFKA_BROKERS=localhost:29092
 CLICKHOUSE_HOST=localhost
+CLICKHOUSE_USER=neuralops
+CLICKHOUSE_PASSWORD=neuralops
 POSTGRES_URL=postgresql://neuralops:neuralops@localhost:5432/neuralops
 REDIS_URL=redis://localhost:6379/0
+
+# SDK endpoint
 NEURALOPS_ENDPOINT=http://localhost:8000
+
+# Optional: LLM-as-judge eval scoring
+ANTHROPIC_API_KEY=sk-ant-...
+JUDGE_MODEL=claude-haiku-4-5
 ```
 
 ---
@@ -442,28 +451,32 @@ NEURALOPS_ENDPOINT=http://localhost:8000
 - [x] Causal chain propagation across agent hops
 - [x] FastAPI ingestion server with Kafka
 - [x] ClickHouse trace store with materialized views
-- [x] Kafka to ClickHouse consumer
+- [x] Kafka to ClickHouse consumer with batch inserts
 - [x] Causal stitching engine
 - [x] LLM-as-judge eval pipeline
-- [x] Welford drift detection
-- [x] Multi-LLM router with auto-fallback
-- [x] 3-agent pipeline (Planner, Researcher, Critic)
-- [x] Benchmark arena with LLM scoring
-- [x] Next.js dashboard (7 pages)
-- [x] GitHub Actions CI
-- [ ] Colab A100 notebook (vLLM self-hosted inference)
-- [ ] LoRA fine-tuning on agent trace data
-- [ ] fly.io one-command cloud deploy
-- [ ] Helm chart for Kubernetes
+- [x] Welford drift detection (latency, cost, error rate)
+- [x] Multi-LLM router with auto-fallback (Groq, Mistral, OpenRouter)
+- [x] 3-agent pipeline (Planner, Researcher, Critic) using free APIs
+- [x] Benchmark arena with parallel execution and LLM scoring
+- [x] Next.js dashboard — 7 pages, Framer Motion, animated canvas background
+- [x] GitHub Actions CI — benchmark on every push, leaderboard in job summary
+- [x] Cloudflare Pages deployment (neuralops.pages.dev)
+- [x] Full end-to-end pipeline verified: Agent → Kafka → ClickHouse → Dashboard
+- [x] Colab A100 notebook — vLLM + Llama 3.1 70B self-hosted inference
+- [ ] PyPI publish (pip install neuralops-sdk)
 - [ ] JavaScript SDK
+- [ ] LangChain auto-instrumentation
+- [ ] LoRA fine-tuning on agent trace data
+- [ ] Helm chart for Kubernetes
+- [ ] Prometheus metrics endpoint
 
 ---
 
 ## Author
 
-Built by **Aprameya** — researcher at CSIR with background in protein synergy docking and computational biology, now building production AI infrastructure.
+Built by **Aprameya**.
 
-[GitHub](https://github.com/Aprameya05) &nbsp;|&nbsp; [neuralops](https://github.com/Aprameya05/neuralops)
+[GitHub](https://github.com/Aprameya05) &nbsp;|&nbsp; [neuralops](https://github.com/Aprameya05/neuralops) &nbsp;|&nbsp; [Live Demo](https://neuralops.pages.dev)
 
 ---
 
