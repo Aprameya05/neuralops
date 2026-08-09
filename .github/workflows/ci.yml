@@ -1,0 +1,35 @@
+name: NeuralOps CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint + Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dev deps
+        run: |
+          pip install ruff mypy pydantic httpx structlog tenacity python-dotenv tiktoken
+
+      - name: Ruff lint
+        run: ruff check sdk/neuralops/ server/ --ignore E501,F401
+
+      - name: Check imports
+        run: |
+          cd sdk
+          python -c "import neuralops; print('SDK imports OK')"
+          python -c "from neuralops import router; print('Router imports OK')"
+          python -c "from neuralops.models import Span, LLMCallSpan, ToolCallSpan; print('Models OK')"
+          python -c "from neuralops.cost import estimate_cost; print('Cost engine OK')"
+          python -c "from neuralops.drift import DriftDetector; print('Drift detector OK')"
