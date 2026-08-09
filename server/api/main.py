@@ -128,3 +128,8 @@ async def ingest(request: Request, body: list[dict[str, Any]]) -> IngestResponse
 @app.get("/v1/ws/alerts")
 async def ws_info() -> dict[str, str]:
     return {"ws_endpoint": "ws://localhost:8000/ws/alerts"}
+
+
+# ── Agent routes ───────────────────────────────────────────────────────────
+from .agent_routes import router as agent_router
+app.include_router(agent_router)
