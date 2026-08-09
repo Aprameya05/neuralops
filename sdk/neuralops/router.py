@@ -53,23 +53,25 @@ PROVIDERS: list[ProviderConfig] = [
         api_key_env="GROQ_API_KEY",
         model="llama-3.3-70b-versatile", # free tier, 100K TPD
     ),
-    ProviderConfig(
-        name=Provider.GEMINI,
-        base_url="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-        api_key_env="GEMINI_API_KEY",
-        model="gemini-2.0-flash",        # free tier, 1500 RPD
-    ),
+
     ProviderConfig(
         name=Provider.MISTRAL,
         base_url="https://api.mistral.ai/v1/chat/completions",
         api_key_env="MISTRAL_API_KEY",
         model="mistral-small-latest",    # free tier
     ),
+       ProviderConfig(
+            name=Provider.GEMINI,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+            api_key_env="GEMINI_API_KEY",
+            model="gemini-2.0-flash",        # free tier, 1500 RPD
+        ),
+        
     ProviderConfig(
         name=Provider.OPENROUTER,
         base_url="https://openrouter.ai/api/v1/chat/completions",
         api_key_env="OPENROUTER_API_KEY",
-        model="meta-llama/llama-3.3-70b-instruct:free",  # :free enforced — never paid
+        model="openai/gpt-oss-20b:free",  # :free enforced — never paid
         headers_extra={
             "HTTP-Referer": "https://github.com/Aprameya05/neuralops",
             "X-Title": "NeuralOps",
