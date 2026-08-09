@@ -465,7 +465,7 @@ JUDGE_MODEL=claude-haiku-4-5
 - [x] Full end-to-end pipeline verified: Agent → Kafka → ClickHouse → Dashboard
 - [x] Colab A100 notebook — vLLM + Llama 3.1 70B self-hosted inference
 - [x] PyPI publish (pip install neuralops-observability)
-- [ ] JavaScript SDK
+- [x] JavaScript SDK (npm install neuralops-sdk — coming to npm soon)
 - [ ] LangChain auto-instrumentation
 - [ ] LoRA fine-tuning on agent trace data
 - [ ] Helm chart for Kubernetes
