@@ -11,7 +11,8 @@
 <img src="https://img.shields.io/badge/License-Apache_2.0-6366f1?style=for-the-badge&labelColor=0a0a0a" alt="license"/>
 &nbsp;
 <img src="https://img.shields.io/badge/Python-3.10+-6366f1?style=for-the-badge&labelColor=0a0a0a" alt="python"/>
-
+&nbsp;
+<img src="https://img.shields.io/pypi/v/neuralops-observability?style=for-the-badge&label=PyPI&labelColor=0a0a0a&color=6366f1" alt="pypi"/>
 <br/><br/>
 
 ```
@@ -30,8 +31,7 @@ Self-hosted. Open source. Zero vendor lock-in.
 
 <br/>
 
-[**Live Demo**](https://neuralops.pages.dev) &nbsp;|&nbsp; [**Quickstart**](#quickstart) &nbsp;|&nbsp; [**Architecture**](#architecture) &nbsp;|&nbsp; [**SDK**](#sdk) &nbsp;|&nbsp; [**Benchmark Arena**](#benchmark-arena) &nbsp;|&nbsp; [**Dashboard**](#dashboard);| &nbsp;
-<img src="https://img.shields.io/pypi/v/neuralops-observability?style=for-the-badge&label=PyPI&labelColor=0a0a0a&color=6366f1" alt="pypi"/>
+[**Live Demo**](https://neuralops.pages.dev) &nbsp;|&nbsp; [**Quickstart**](#quickstart) &nbsp;|&nbsp; [**Architecture**](#architecture) &nbsp;|&nbsp; [**SDK**](#sdk) &nbsp;|&nbsp; [**Benchmark Arena**](#benchmark-arena) &nbsp;|&nbsp; [**Dashboard**](#dashboard);
 
 </div>
 
