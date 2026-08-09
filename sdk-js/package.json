@@ -1,0 +1,31 @@
+{
+  "name": "neuralops-sdk",
+  "version": "0.1.0",
+  "description": "Universal AI agent observability SDK for Node.js — trace, cost, drift, causal replay",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "node --test dist/test.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "observability", "llm", "ai-agents", "tracing", "opentelemetry",
+    "langchain", "openai", "anthropic", "monitoring"
+  ],
+  "author": "Aprameya (https://github.com/Aprameya05)",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Aprameya05/neuralops"
+  },
+  "homepage": "https://neuralops.pages.dev",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "@types/node": "^20.14.2"
+  },
+  "files": ["dist", "README.md"],
+  "engines": { "node": ">=18" }
+}
