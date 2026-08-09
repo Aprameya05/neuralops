@@ -28,6 +28,7 @@ jobs:
 
       - name: Run benchmark arena
         id: benchmark
+        continue-on-error: true
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
@@ -81,6 +82,14 @@ jobs:
         run: |
           python -c "
           import json, os
+
+          if not os.path.exists('benchmark_results.json'):
+              report = '## NeuralOps Benchmark\n\nBenchmark did not produce results. Check the benchmark step logs.'
+              with open('benchmark_report.md', 'w') as f:
+                  f.write(report)
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+                  f.write(report)
+              exit(0)
 
           with open('benchmark_results.json') as f:
               data = json.load(f)
