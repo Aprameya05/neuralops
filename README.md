@@ -30,7 +30,8 @@ Self-hosted. Open source. Zero vendor lock-in.
 
 <br/>
 
-[**Live Demo**](https://neuralops.pages.dev) &nbsp;|&nbsp; [**Quickstart**](#quickstart) &nbsp;|&nbsp; [**Architecture**](#architecture) &nbsp;|&nbsp; [**SDK**](#sdk) &nbsp;|&nbsp; [**Benchmark Arena**](#benchmark-arena) &nbsp;|&nbsp; [**Dashboard**](#dashboard)
+[**Live Demo**](https://neuralops.pages.dev) &nbsp;|&nbsp; [**Quickstart**](#quickstart) &nbsp;|&nbsp; [**Architecture**](#architecture) &nbsp;|&nbsp; [**SDK**](#sdk) &nbsp;|&nbsp; [**Benchmark Arena**](#benchmark-arena) &nbsp;|&nbsp; [**Dashboard**](#dashboard);| &nbsp;
+<img src="https://img.shields.io/pypi/v/neuralops-observability?style=for-the-badge&label=PyPI&labelColor=0a0a0a&color=6366f1" alt="pypi"/>
 
 </div>
 
@@ -152,7 +153,7 @@ python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 python -m server.consumers.span_consumer
 
 # 6. Install SDK and run example agent
-pip install -e ./sdk
+pip install neuralops-observability
 python examples/example_agent.py
 
 # 7. Open dashboard
@@ -378,7 +379,7 @@ Both are visible at [github.com/Aprameya05/neuralops/actions](https://github.com
 ```
 neuralops/
 |
-+-- sdk/                           Python SDK (pip install -e ./sdk)
++-- sdk/                           Python SDK (pip install neuralops-observability)
 |   +-- neuralops/
 |       +-- tracer.py              @trace, trace_llm_call, trace_tool_call
 |       +-- context.py             AgentContext, causal_chain_id propagation
@@ -463,7 +464,7 @@ JUDGE_MODEL=claude-haiku-4-5
 - [x] Cloudflare Pages deployment (neuralops.pages.dev)
 - [x] Full end-to-end pipeline verified: Agent → Kafka → ClickHouse → Dashboard
 - [x] Colab A100 notebook — vLLM + Llama 3.1 70B self-hosted inference
-- [ ] PyPI publish (pip install neuralops-sdk)
+- [x] PyPI publish (pip install neuralops-observability)
 - [ ] JavaScript SDK
 - [ ] LangChain auto-instrumentation
 - [ ] LoRA fine-tuning on agent trace data
