@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: neuralops-api
+    runtime: python
+    rootDir: server
+    buildCommand: pip install -r requirements-cloud.txt
+    startCommand: uvicorn api.cloud_main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: REDIS_URL
+        sync: false
+      - key: POSTGRES_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: NEURALOPS_ENDPOINT
+        sync: false
+
+  - type: worker
+    name: neuralops-consumer
+    runtime: python
+    rootDir: server
+    buildCommand: pip install -r requirements-cloud.txt
+    startCommand: python -m consumers.cloud_consumer
+    envVars:
+      - key: REDIS_URL
+        sync: false
+      - key: POSTGRES_URL
+        sync: false
