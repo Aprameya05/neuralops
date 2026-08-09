@@ -63,6 +63,7 @@ async def search_chains(req: SearchRequest) -> list[dict[str, Any]]:
     return results
 
 
+@router.get("/index")
 @router.post("/index")
 async def trigger_indexing(hours: int = Query(24, ge=1, le=168)) -> dict[str, Any]:
     """
