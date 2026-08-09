@@ -1,0 +1,88 @@
+# NeuralOps Helm Chart — default values
+# Override with: helm install neuralops ./infra/helm/neuralops -f my-values.yaml
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/aprameya05/neuralops
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+api:
+  port: 8000
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+  hosts:
+    - host: neuralops.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# External dependencies — provide connection strings
+externalSecrets:
+  redis:
+    url: ""           # redis://user:pass@host:port
+  postgres:
+    url: ""           # postgresql://user:pass@host:port/db
+
+# LLM provider API keys
+llmProviders:
+  groq:
+    apiKey: ""
+  mistral:
+    apiKey: ""
+  openrouter:
+    apiKey: ""
+
+# Kafka configuration (optional — skip if using Redis Streams)
+kafka:
+  enabled: false
+  brokers: "kafka:9092"
+  topic: "neuralops.spans"
+
+# ClickHouse configuration (optional — skip if using Postgres)
+clickhouse:
+  enabled: false
+  host: "localhost"
+  user: "neuralops"
+  password: ""
+  database: "neuralops"
+
+# Monitoring
+metrics:
+  enabled: true
+  path: /metrics
+  port: 8000
+
+serviceMonitor:
+  enabled: false
+  namespace: monitoring
+  interval: 30s
+  labels:
+    release: prometheus
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

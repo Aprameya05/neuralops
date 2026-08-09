@@ -1,0 +1,18 @@
+apiVersion: v2
+name: neuralops
+description: Universal AI agent observability platform
+type: application
+version: 0.1.0
+appVersion: "0.1.1"
+keywords:
+  - observability
+  - llm
+  - ai-agents
+  - tracing
+  - mlops
+home: https://github.com/Aprameya05/neuralops
+sources:
+  - https://github.com/Aprameya05/neuralops
+maintainers:
+  - name: Aprameya
+    url: https://github.com/Aprameya05
