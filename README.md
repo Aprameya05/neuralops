@@ -34,7 +34,9 @@ Self-hosted. Open source. Zero vendor lock-in.
 [**Live Demo**](https://neuralops.pages.dev) &nbsp;|&nbsp; [**Quickstart**](#quickstart) &nbsp;|&nbsp; [**Architecture**](#architecture) &nbsp;|&nbsp; [**SDK**](#sdk) &nbsp;|&nbsp; [**Benchmark Arena**](#benchmark-arena) &nbsp;|&nbsp; [**Dashboard**](#dashboard);
 
 </div>
+<br/>
 
+![NeuralOps Demo](demo.gif)
 ---
 
 ## The problem
