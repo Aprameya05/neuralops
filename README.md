@@ -467,7 +467,10 @@ JUDGE_MODEL=claude-haiku-4-5
 - [x] PyPI publish (pip install neuralops-observability)
 - [x] JavaScript SDK (npm install neuralops-sdk — coming to npm soon)
 - [ ] LangChain auto-instrumentation
-- [ ] LoRA fine-tuning on agent trace data
+- [x] LoRA fine-tuning on agent trace data (notebooks/neuralops_lora.ipynb)
+- [x] Anomaly replay with root cause attribution
+- [x] Multi-tenant support with API key isolation
+- [x] Slack and PagerDuty alert integrations
 - [ ] Helm chart for Kubernetes
 - [ ] Prometheus metrics endpoint
 
