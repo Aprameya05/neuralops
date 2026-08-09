@@ -1,3 +1,5 @@
+import os
+os.environ['NEURALOPS_ENDPOINT'] = 'https://neuralops-api-cmgf.onrender.com'
 import asyncio, sys, os 
 sys.path.insert(0, 'sdk') 
 sys.path.insert(0, '.') 
