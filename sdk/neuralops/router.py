@@ -28,7 +28,6 @@ log = structlog.get_logger(__name__)
 
 
 class Provider(str, Enum):
-    CEREBRAS   = "cerebras"
     GROQ       = "groq"
     GEMINI     = "gemini"
     MISTRAL    = "mistral"
@@ -48,12 +47,6 @@ class ProviderConfig:
 # ── All free, all confirmed no-billing ───────────────────────────────────
 
 PROVIDERS: list[ProviderConfig] = [
-    ProviderConfig(
-        name=Provider.CEREBRAS,
-        base_url="https://api.cerebras.ai/v1/chat/completions",
-        api_key_env="CEREBRAS_API_KEY",
-        model="llama3.1-70b",             # free tier
-    ),
     ProviderConfig(
         name=Provider.GROQ,
         base_url="https://api.groq.com/openai/v1/chat/completions",
