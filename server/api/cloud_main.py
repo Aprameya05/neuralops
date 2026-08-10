@@ -484,8 +484,8 @@ async def causal_attribution(
         GET /v1/traces/csl_65a1b2/attribution
         GET /v1/traces/csl_65a1b2/attribution?error_span_id=spn_abc123
     """
-    from engine.causal_attribution import get_engine
-    engine = get_engine()
+    from engine.causal_attribution import CausalAttributionEngine
+    engine = CausalAttributionEngine(_pg)
     report = await engine.attribute(causal_chain_id, error_span_id)
     return {
         "causal_chain_id":  report.causal_chain_id,
