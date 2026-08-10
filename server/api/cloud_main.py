@@ -564,6 +564,62 @@ async def spans_timeseries(minutes: int = 30) -> list:
         }
         for r in rows
     ]
+@app.get("/v1/agents/fingerprint")
+async def agent_fingerprint(hours: int = 24) -> dict:
+    """
+    Behavioral fingerprinting and clustering of all agents.
+
+    Extracts behavioral signatures from trace patterns and clusters
+    agents by similarity. Identifies archetypes, redundancy, and
+    anomalous agents.
+
+    Example:
+        GET /v1/agents/fingerprint?hours=24
+    """
+    from engine.agent_fingerprint import AgentFingerprintEngine
+    engine = AgentFingerprintEngine(_pg)
+    report = await engine.fingerprint(hours)
+    return {
+        "summary": report.summary,
+        "fingerprints": [
+            {
+                "agent_id":          fp.agent_id,
+                "agent_framework":   fp.agent_framework,
+                "archetype":         fp.archetype,
+                "total_spans":       fp.total_spans,
+                "total_chains":      fp.total_chains,
+                "avg_latency_ms":    fp.avg_latency_ms,
+                "p95_latency_ms":    fp.p95_latency_ms,
+                "error_rate":        fp.error_rate,
+                "tool_affinity":     fp.tool_affinity,
+                "avg_cost_per_span": fp.avg_cost_per_span,
+                "spans_per_chain":   fp.spans_per_chain,
+                "top_operations":    [{"op": op, "fraction": frac} for op, frac in fp.top_operations],
+                "signature":         fp.signature,
+            }
+            for fp in report.fingerprints
+        ],
+        "similarities": [
+            {
+                "agent_a":    s.agent_a,
+                "agent_b":    s.agent_b,
+                "similarity": s.similarity,
+                "shared_ops": s.shared_ops,
+                "explanation":s.explanation,
+            }
+            for s in report.similarities
+        ],
+        "clusters": [
+            {
+                "cluster_id":  c.cluster_id,
+                "archetype":   c.archetype,
+                "agents":      c.agents,
+                "cohesion":    c.cohesion,
+                "description": c.description,
+            }
+            for c in report.clusters
+        ],
+    }
 # ---------------------------------------------------------------------------
 # Prometheus /metrics endpoint
 # ---------------------------------------------------------------------------
