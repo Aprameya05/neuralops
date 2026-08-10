@@ -84,7 +84,8 @@ async def consumer_loop() -> None:
     # Import here to avoid circular import at module level
     from engine.vector_search import index_span, set_pool as vs_set_pool
     vs_set_pool(_pg)  # inject shared pool
-
+    from engine.causal_attribution import set_pool as attr_set_pool
+    attr_set_pool(_pg)
     batch: list[dict] = []
     ids: list[str] = []
     last_flush = time.monotonic()
@@ -462,7 +463,84 @@ async def drift_alerts(hours: int = 1) -> list:
         hours,
     )
     return [dict(r) for r in rows]
+# Add these endpoints to cloud_main.py
+# Place after the drift_alerts endpoint and before the spans/timeseries endpoint
 
+@app.get("/v1/traces/{causal_chain_id}/attribution")
+async def causal_attribution(
+    causal_chain_id: str,
+    error_span_id: str | None = None,
+) -> dict:
+    """
+    Root cause attribution for a causal chain.
+
+    Scores every upstream span by its causal contribution to the failure
+    using a composite of temporal proximity, error propagation, latency
+    anomaly, and structural centrality signals.
+
+    Returns ranked list of likely root causes with confidence score.
+
+    Example:
+        GET /v1/traces/csl_65a1b2/attribution
+        GET /v1/traces/csl_65a1b2/attribution?error_span_id=spn_abc123
+    """
+    from engine.causal_attribution import get_engine
+    engine = get_engine()
+    report = await engine.attribute(causal_chain_id, error_span_id)
+    return {
+        "causal_chain_id":  report.causal_chain_id,
+        "error_span_id":    report.error_span_id,
+        "error_operation":  report.error_operation,
+        "total_spans":      report.total_spans,
+        "confidence":       report.confidence,
+        "summary":          report.summary,
+        "root_cause": {
+            "span_id":           report.root_cause.span_id,
+            "operation_name":    report.root_cause.operation_name,
+            "agent_id":          report.root_cause.agent_id,
+            "status":            report.root_cause.status,
+            "duration_ms":       report.root_cause.duration_ms,
+            "attribution_score": report.root_cause.attribution_score,
+            "explanation":       report.root_cause.explanation,
+        } if report.root_cause else None,
+        "ranked_causes": [
+            {
+                "span_id":           r.span_id,
+                "operation_name":    r.operation_name,
+                "agent_id":          r.agent_id,
+                "status":            r.status,
+                "duration_ms":       r.duration_ms,
+                "attribution_score": r.attribution_score,
+                "temporal_score":    r.temporal_score,
+                "error_score":       r.error_score,
+                "latency_score":     r.latency_score,
+                "centrality_score":  r.centrality_score,
+                "descendant_count":  r.descendant_count,
+                "explanation":       r.explanation,
+            }
+            for r in report.ranked_causes
+        ],
+    }
+
+
+@app.get("/v1/traces/{causal_chain_id}/diff")
+async def trace_diff(
+    causal_chain_id: str,
+    compare_to: str,
+) -> dict:
+    """
+    Structural diff between two causal chains.
+
+    Compares operation sequences, agent participation, latency profiles,
+    and cost distribution between two chains. Highlights divergence points.
+
+    Example:
+        GET /v1/traces/csl_abc/diff?compare_to=csl_xyz
+    """
+    from engine.trace_diff import TraceDiffEngine
+    engine = TraceDiffEngine(_pg)
+    diff = await engine.diff(causal_chain_id, compare_to)
+    return diff
 @app.get("/v1/traces/spans/timeseries")
 async def spans_timeseries(minutes: int = 30) -> list:
     rows = await _pg.fetch(
