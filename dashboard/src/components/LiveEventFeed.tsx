@@ -111,14 +111,26 @@ export default function LiveEventFeed() {
   }, []);
 
   useEffect(() => {
-    poll();
-    const pollInterval = setInterval(poll, POLL_MS);
-    tickerRef.current  = setInterval(drainQueue, 600);
-    return () => {
-      clearInterval(pollInterval);
-      if (tickerRef.current) clearInterval(tickerRef.current);
-    };
-  }, [poll, drainQueue]);
+  // First load: show all existing traces immediately
+  getTraces({ limit: 20 }).then((traces) => {
+    if (!traces || traces.length === 0) return;
+    const initial: LiveEvent[] = [];
+    for (const trace of traces) {
+      seenChains.current.add(trace.causal_chain_id);
+      initial.push(...traceToEvents(trace));
+    }
+    initial.sort(() => Math.random() - 0.5);
+    queueRef.current.push(...initial.slice(0, 30));
+    setIsLive(true);
+  }).catch(() => setIsLive(false));
+
+  const pollInterval = setInterval(poll, POLL_MS);
+  tickerRef.current  = setInterval(drainQueue, 600);
+  return () => {
+    clearInterval(pollInterval);
+    if (tickerRef.current) clearInterval(tickerRef.current);
+  };
+}, [poll, drainQueue]);
 
   return (
     <div className={`bg-[#0f0f0f] border rounded-2xl overflow-hidden shadow-xl transition-all duration-300 ${
