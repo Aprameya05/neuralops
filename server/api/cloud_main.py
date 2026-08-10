@@ -1,7 +1,12 @@
 """
-NeuralOps Cloud API — FastAPI + Redis Streams consumer in one process.
-Uses Redis Streams instead of Kafka, Neon Postgres instead of ClickHouse.
-Fully free forever on Render free tier.
+NeuralOps Cloud API -- FastAPI + Redis Streams consumer in one process.
+
+Improvements over v1:
+  - Shared asyncpg pool injected into vector_search (no per-call pool creation)
+  - Inline embedding indexing after each consumer flush
+  - WebSocket endpoint for live trace streaming
+  - Prometheus metrics wired to real span data
+  - gRPC ingestion server running alongside HTTP
 """
 
 from __future__ import annotations
@@ -17,7 +22,7 @@ from typing import Any
 import asyncpg
 import redis.asyncio as aioredis
 import structlog
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 log = structlog.get_logger(__name__)
@@ -31,6 +36,31 @@ CONSUMER     = "consumer-1"
 _redis: aioredis.Redis | None = None
 _pg: asyncpg.Pool | None = None
 
+# WebSocket connection registry
+_ws_clients: set[WebSocket] = set()
+
+
+# ---------------------------------------------------------------------------
+# WebSocket broadcast helper
+# ---------------------------------------------------------------------------
+
+async def _broadcast(payload: dict) -> None:
+    """Broadcast a span event to all connected WebSocket clients."""
+    if not _ws_clients:
+        return
+    msg = json.dumps(payload, default=str)
+    dead: set[WebSocket] = set()
+    for ws in _ws_clients:
+        try:
+            await ws.send_text(msg)
+        except Exception:
+            dead.add(ws)
+    _ws_clients.difference_update(dead)
+
+
+# ---------------------------------------------------------------------------
+# Consumer group setup
+# ---------------------------------------------------------------------------
 
 async def ensure_consumer_group() -> None:
     try:
@@ -39,19 +69,22 @@ async def ensure_consumer_group() -> None:
         pass
 
 
-async def _parse_dt(value: Any) -> datetime | None:
-    if value is None:
-        return None
-    try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except Exception:
-        return None
-
+# ---------------------------------------------------------------------------
+# Background consumer loop
+# ---------------------------------------------------------------------------
 
 async def consumer_loop() -> None:
-    """Background consumer — reads from Redis Streams, writes to Postgres."""
+    """
+    Reads from Redis Streams, writes to Postgres, indexes embeddings,
+    and broadcasts to WebSocket clients.
+    """
     await ensure_consumer_group()
     log.info("consumer.started")
+
+    # Import here to avoid circular import at module level
+    from engine.vector_search import index_span, set_pool as vs_set_pool
+    vs_set_pool(_pg)  # inject shared pool
+
     batch: list[dict] = []
     ids: list[str] = []
     last_flush = time.monotonic()
@@ -105,6 +138,7 @@ async def consumer_loop() -> None:
                         datetime.now(timezone.utc),
                         raw.get("_client_ip") or "",
                     ))
+
                 try:
                     await _pg.executemany(
                         """INSERT INTO spans (
@@ -120,11 +154,35 @@ async def consumer_loop() -> None:
                         ON CONFLICT (span_id) DO NOTHING""",
                         rows,
                     )
+
                     if ids:
                         await _redis.xack(STREAM_KEY, GROUP_NAME, *ids)
+
                     log.info("consumer.flushed", count=len(rows))
+
+                    # Index embeddings for the flushed batch (non-blocking)
+                    asyncio.create_task(_index_batch(batch, index_span))
+
+                    # Broadcast last span to WebSocket clients
+                    if batch:
+                        asyncio.create_task(_broadcast({
+                            "event": "span",
+                            "data": {
+                                "span_id": batch[-1].get("span_id"),
+                                "causal_chain_id": batch[-1].get("causal_chain_id"),
+                                "agent_id": batch[-1].get("agent_id"),
+                                "operation_name": batch[-1].get("operation_name"),
+                                "status": batch[-1].get("status"),
+                                "duration_ms": batch[-1].get("duration_ms"),
+                            }
+                        }))
+
+                    # Update Prometheus counters
+                    _update_metrics(batch)
+
                 except Exception as exc:
                     log.error("consumer.flush_error", error=str(exc))
+
                 batch = []
                 ids = []
                 last_flush = time.monotonic()
@@ -134,27 +192,163 @@ async def consumer_loop() -> None:
             await asyncio.sleep(1)
 
 
+async def _index_batch(batch: list[dict], index_fn) -> None:
+    """Fire-and-forget embedding indexing for a flushed batch."""
+    for raw in batch:
+        try:
+            await index_fn(raw, _pg)
+        except Exception as exc:
+            log.warning("consumer.index_error", span_id=raw.get("span_id"), error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics
+# ---------------------------------------------------------------------------
+
+try:
+    from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
+    _PROM_AVAILABLE = True
+except ImportError:
+    _PROM_AVAILABLE = False
+    log.warning("prometheus_client not installed; /metrics will return empty")
+
+if _PROM_AVAILABLE:
+    _spans_ingested   = Counter("neuralops_spans_ingested_total", "Total spans ingested", ["agent_id", "status"])
+    _spans_per_minute = Gauge("neuralops_spans_per_minute", "Spans ingested in the last minute")
+    _cost_usd_total   = Counter("neuralops_cost_usd_total", "Total estimated USD cost", ["agent_id", "model"])
+    _latency_ms       = Histogram("neuralops_span_latency_ms", "Span duration in ms",
+                                  buckets=[10, 50, 100, 250, 500, 1000, 2000, 5000, 10000])
+    _error_rate       = Gauge("neuralops_error_rate", "Current error rate (0-1)")
+    _active_agents    = Gauge("neuralops_active_agents", "Number of distinct agents seen in last 5 minutes")
+
+    _recent_span_times: list[float] = []  # timestamps for rolling SPM
+    _recent_errors: list[bool] = []       # for rolling error rate
+
+def _update_metrics(batch: list[dict]) -> None:
+    if not _PROM_AVAILABLE:
+        return
+    now = time.monotonic()
+    for raw in batch:
+        agent  = raw.get("agent_id", "unknown")
+        status = raw.get("status", "ok")
+        model  = raw.get("model", "unknown")
+        cost   = (raw.get("cost") or {}).get("estimated_usd") or 0.0
+        dur    = raw.get("duration_ms") or 0.0
+
+        _spans_ingested.labels(agent_id=agent, status=status).inc()
+        if cost:
+            _cost_usd_total.labels(agent_id=agent, model=model).inc(cost)
+        if dur:
+            _latency_ms.observe(dur)
+
+        _recent_span_times.append(now)
+        _recent_errors.append(status == "error")
+
+    # Trim to last 60 seconds
+    cutoff = now - 60.0
+    while _recent_span_times and _recent_span_times[0] < cutoff:
+        _recent_span_times.pop(0)
+        _recent_errors.pop(0)
+
+    _spans_per_minute.set(len(_recent_span_times))
+    if _recent_errors:
+        _error_rate.set(sum(_recent_errors) / len(_recent_errors))
+
+
+# ---------------------------------------------------------------------------
+# gRPC ingestion server
+# ---------------------------------------------------------------------------
+
+async def _start_grpc_server() -> None:
+    """
+    Start gRPC server on port 50051.
+    Proto: neuralops.proto (IngestSpan, IngestBatch, IngestResponse)
+    Falls back gracefully if grpcio or proto stubs not installed.
+    """
+    try:
+        import grpc
+        from grpc import aio as grpc_aio
+        from api import neuralops_pb2, neuralops_pb2_grpc
+
+        class NeuralOpsServicer(neuralops_pb2_grpc.NeuralOpsIngestServicer):
+            async def IngestBatch(self, request, context):
+                accepted = 0
+                for span_proto in request.spans:
+                    try:
+                        raw = {
+                            "span_id":        span_proto.span_id,
+                            "trace_id":       span_proto.trace_id,
+                            "causal_chain_id":span_proto.causal_chain_id,
+                            "agent_id":       span_proto.agent_id,
+                            "operation_name": span_proto.operation_name,
+                            "status":         span_proto.status,
+                            "duration_ms":    span_proto.duration_ms,
+                            "model":          span_proto.model,
+                            "error_message":  span_proto.error_message,
+                            "_received_at":   time.time(),
+                            "_transport":     "grpc",
+                        }
+                        await _redis.xadd(STREAM_KEY, {"data": json.dumps(raw, default=str)})
+                        accepted += 1
+                    except Exception:
+                        pass
+                return neuralops_pb2.IngestResponse(accepted=accepted, rejected=len(request.spans) - accepted)
+
+        server = grpc_aio.server()
+        neuralops_pb2_grpc.add_NeuralOpsIngestServicer_to_server(NeuralOpsServicer(), server)
+        server.add_insecure_port("[::]:50051")
+        await server.start()
+        log.info("grpc.server.started", port=50051)
+        await server.wait_for_termination()
+
+    except ImportError:
+        log.warning("grpc.unavailable", reason="grpcio or proto stubs not installed; HTTP ingestion still works")
+    except Exception as exc:
+        log.error("grpc.start_error", error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# App lifespan
+# ---------------------------------------------------------------------------
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _redis, _pg
     _redis = await aioredis.from_url(REDIS_URL, decode_responses=True)
-    _pg = await asyncpg.create_pool(POSTGRES_URL, min_size=2, max_size=10)
-    # Start consumer in background
-    task = asyncio.create_task(consumer_loop())
+    _pg    = await asyncpg.create_pool(POSTGRES_URL, min_size=2, max_size=10)
+
+    consumer_task = asyncio.create_task(consumer_loop())
+    grpc_task     = asyncio.create_task(_start_grpc_server())
+
     log.info("neuralops.cloud.started")
     yield
-    task.cancel()
+
+    consumer_task.cancel()
+    grpc_task.cancel()
     await _redis.close()
     await _pg.close()
 
 
-app = FastAPI(title="NeuralOps Cloud API", version="0.1.0", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# ---------------------------------------------------------------------------
+# FastAPI app
+# ---------------------------------------------------------------------------
 
+app = FastAPI(title="NeuralOps Cloud API", version="0.2.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ---------------------------------------------------------------------------
+# REST endpoints
+# ---------------------------------------------------------------------------
 
 @app.get("/v1/health")
 async def health() -> dict:
-    return {"status": "ok"}
+    return {"status": "ok", "version": "0.2.0"}
 
 
 @app.post("/v1/ingest")
@@ -166,7 +360,7 @@ async def ingest(request: Request, body: list[dict[str, Any]]) -> dict:
         if not isinstance(span, dict) or "span_id" not in span:
             continue
         span["_received_at"] = time.time()
-        span["_client_ip"] = request.client.host if request.client else ""
+        span["_client_ip"]   = request.client.host if request.client else ""
         await _redis.xadd(STREAM_KEY, {"data": json.dumps(span, default=str)})
         accepted += 1
     return {"accepted": accepted, "rejected": len(body) - accepted}
@@ -175,14 +369,19 @@ async def ingest(request: Request, body: list[dict[str, Any]]) -> dict:
 @app.get("/v1/traces/")
 async def list_traces(limit: int = 50, offset: int = 0) -> dict:
     rows = await _pg.fetch(
-        """SELECT causal_chain_id, min(started_at) AS started_at,
-           count(*) AS span_count, sum(duration_ms) AS total_duration_ms,
-           sum(estimated_usd) AS total_cost_usd,
-           array_agg(DISTINCT agent_id) AS agent_ids,
-           count(*) FILTER (WHERE status='error') AS error_count
-           FROM spans GROUP BY causal_chain_id
-           ORDER BY started_at DESC LIMIT $1 OFFSET $2""",
-        limit, offset
+        """SELECT causal_chain_id,
+                  min(started_at) AS started_at,
+                  count(*) AS span_count,
+                  sum(duration_ms) AS total_duration_ms,
+                  sum(estimated_usd) AS total_cost_usd,
+                  array_agg(DISTINCT agent_id) AS agent_ids,
+                  count(*) FILTER (WHERE status='error') AS error_count,
+                  max(status) AS status
+           FROM spans
+           GROUP BY causal_chain_id
+           ORDER BY started_at DESC
+           LIMIT $1 OFFSET $2""",
+        limit, offset,
     )
     return {"traces": [dict(r) for r in rows], "limit": limit, "offset": offset}
 
@@ -191,7 +390,7 @@ async def list_traces(limit: int = 50, offset: int = 0) -> dict:
 async def replay_trace(causal_chain_id: str) -> dict:
     rows = await _pg.fetch(
         "SELECT * FROM spans WHERE causal_chain_id=$1 ORDER BY started_at ASC",
-        causal_chain_id
+        causal_chain_id,
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Not found")
@@ -201,7 +400,7 @@ async def replay_trace(causal_chain_id: str) -> dict:
         "spans": spans,
         "total_spans": len(spans),
         "total_cost_usd": sum(s.get("estimated_usd") or 0 for s in spans),
-        "agent_ids": list(set(s["agent_id"] for s in spans)),
+        "agent_ids": list({s["agent_id"] for s in spans}),
         "has_errors": any(s["status"] == "error" for s in spans),
     }
 
@@ -209,11 +408,17 @@ async def replay_trace(causal_chain_id: str) -> dict:
 @app.get("/v1/traces/cost/summary")
 async def cost_summary(hours: int = 24) -> list:
     rows = await _pg.fetch(
-        """SELECT agent_id, model, date_trunc('hour', started_at) AS hour,
-           count(*) AS calls, sum(total_tokens) AS tokens, sum(estimated_usd) AS cost_usd
-           FROM spans WHERE started_at >= NOW() - INTERVAL '1 hour' * $1 AND model != ''
-           GROUP BY agent_id, model, hour ORDER BY hour DESC, cost_usd DESC""",
-        hours
+        """SELECT agent_id, model,
+                  date_trunc('hour', started_at) AS hour,
+                  count(*) AS calls,
+                  sum(total_tokens) AS tokens,
+                  sum(estimated_usd) AS cost_usd
+           FROM spans
+           WHERE started_at >= NOW() - INTERVAL '1 hour' * $1
+             AND model != ''
+           GROUP BY agent_id, model, hour
+           ORDER BY hour DESC, cost_usd DESC""",
+        hours,
     )
     return [dict(r) for r in rows]
 
@@ -221,12 +426,20 @@ async def cost_summary(hours: int = 24) -> list:
 @app.get("/v1/traces/agents/summary")
 async def agents_summary() -> list:
     rows = await _pg.fetch(
-        """SELECT agent_id, agent_framework, service_name, count(*) AS total_spans,
-           count(*) FILTER (WHERE status='error') AS error_spans,
-           sum(estimated_usd) AS total_cost_usd, avg(duration_ms) AS avg_latency_ms,
-           max(started_at) AS last_seen, count(DISTINCT causal_chain_id) AS total_chains
-           FROM spans GROUP BY agent_id, agent_framework, service_name
-           ORDER BY last_seen DESC LIMIT 200"""
+        """SELECT agent_id, agent_framework, service_name,
+                  count(*) AS total_spans,
+                  count(*) FILTER (WHERE status='error') AS error_spans,
+                  CASE WHEN count(*) > 0
+                       THEN count(*) FILTER (WHERE status='error')::float / count(*)
+                       ELSE 0 END AS error_rate,
+                  sum(estimated_usd) AS total_cost_usd,
+                  avg(duration_ms) AS avg_latency_ms,
+                  max(started_at) AS last_seen,
+                  count(DISTINCT causal_chain_id) AS total_chains
+           FROM spans
+           GROUP BY agent_id, agent_framework, service_name
+           ORDER BY last_seen DESC
+           LIMIT 200"""
     )
     return [dict(r) for r in rows]
 
@@ -234,18 +447,97 @@ async def agents_summary() -> list:
 @app.get("/v1/traces/drift/alerts")
 async def drift_alerts(hours: int = 1) -> list:
     rows = await _pg.fetch(
-        """SELECT operation_name, agent_id, count(*) AS total,
-           count(*) FILTER (WHERE status='error') AS errors,
-           count(*) FILTER (WHERE status='error')::float / count(*) AS error_rate,
-           avg(duration_ms) AS avg_latency_ms, max(duration_ms) AS p100_latency_ms
-           FROM spans WHERE started_at >= NOW() - INTERVAL '1 hour' * $1
+        """SELECT operation_name, agent_id,
+                  count(*) AS total,
+                  count(*) FILTER (WHERE status='error') AS errors,
+                  count(*) FILTER (WHERE status='error')::float / count(*) AS error_rate,
+                  avg(duration_ms) AS avg_latency_ms,
+                  max(duration_ms) AS p100_latency_ms
+           FROM spans
+           WHERE started_at >= NOW() - INTERVAL '1 hour' * $1
            GROUP BY operation_name, agent_id
            HAVING count(*) FILTER (WHERE status='error')::float / count(*) > 0.05
-           ORDER BY error_rate DESC LIMIT 100""",
-        hours
+           ORDER BY error_rate DESC
+           LIMIT 100""",
+        hours,
     )
     return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Prometheus /metrics endpoint
+# ---------------------------------------------------------------------------
+
+@app.get("/metrics")
+async def metrics():
+    from fastapi.responses import Response
+    if not _PROM_AVAILABLE:
+        return Response("# prometheus_client not installed\n", media_type="text/plain")
+
+    # Pull live stats from Postgres into gauges before scraping
+    try:
+        row = await _pg.fetchrow(
+            """SELECT
+                 count(DISTINCT agent_id) AS agent_count,
+                 count(*) FILTER (WHERE started_at >= NOW() - INTERVAL '5 minutes') AS recent_spans,
+                 count(*) FILTER (WHERE status='error' AND started_at >= NOW() - INTERVAL '5 minutes') AS recent_errors
+               FROM spans"""
+        )
+        if row:
+            _active_agents.set(row["agent_count"] or 0)
+            recent = row["recent_spans"] or 0
+            errors = row["recent_errors"] or 0
+            if recent > 0:
+                _error_rate.set(errors / recent)
+    except Exception as exc:
+        log.warning("metrics.db_error", error=str(exc))
+
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+# ---------------------------------------------------------------------------
+# WebSocket live trace stream
+# ---------------------------------------------------------------------------
+
+@app.websocket("/ws/traces")
+async def ws_traces(websocket: WebSocket):
+    """
+    WebSocket endpoint for live span streaming.
+    Connect and receive JSON events as spans are ingested.
+
+    Event format:
+        {"event": "span", "data": {span_id, causal_chain_id, agent_id, ...}}
+    """
+    await websocket.accept()
+    _ws_clients.add(websocket)
+    try:
+        # Send current stats on connect
+        try:
+            row = await _pg.fetchrow("SELECT count(*) AS total FROM spans")
+            await websocket.send_text(json.dumps({
+                "event": "connected",
+                "data": {"total_spans": row["total"] if row else 0}
+            }))
+        except Exception:
+            pass
+
+        # Keep connection alive until client disconnects
+        while True:
+            await asyncio.sleep(30)
+            await websocket.send_text(json.dumps({"event": "ping"}))
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        _ws_clients.discard(websocket)
+
+
+# ---------------------------------------------------------------------------
+# Routers
+# ---------------------------------------------------------------------------
+
 from api.metrics import router as metrics_router
-app.include_router(metrics_router)
 from api.search_routes import router as search_router
+
+app.include_router(metrics_router)
 app.include_router(search_router)

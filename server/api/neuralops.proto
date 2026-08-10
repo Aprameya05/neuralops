@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package neuralops;
+
+service NeuralOpsIngest {
+  // Ingest a batch of spans over gRPC (high-throughput alternative to HTTP)
+  rpc IngestBatch (IngestBatchRequest) returns (IngestResponse);
+  // Ingest a single span
+  rpc IngestSpan (SpanProto) returns (IngestResponse);
+}
+
+message SpanProto {
+  string span_id         = 1;
+  string trace_id        = 2;
+  string parent_span_id  = 3;
+  string causal_chain_id = 4;
+  string agent_id        = 5;
+  string agent_framework = 6;
+  string service_name    = 7;
+  string operation_name  = 8;
+  string status          = 9;
+  string error_message   = 10;
+  double duration_ms     = 11;
+  string model           = 12;
+  string provider        = 13;
+  int64  prompt_tokens   = 14;
+  int64  completion_tokens = 15;
+  int64  total_tokens    = 16;
+  double estimated_usd   = 17;
+  double hallucination_score = 18;
+  double faithfulness_score  = 19;
+  string tool_name       = 20;
+  bool   autonomous      = 21;
+  string attributes_json = 22;
+  int64  started_at_ms   = 23;
+}
+
+message IngestBatchRequest {
+  repeated SpanProto spans = 1;
+}
+
+message IngestResponse {
+  int32 accepted = 1;
+  int32 rejected = 2;
+  string message = 3;
+}
