@@ -24,7 +24,8 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
-
+from dotenv import load_dotenv
+load_dotenv(override=True)
 ENDPOINT  = os.environ.get("NEURALOPS_ENDPOINT", "https://neuralops-api-cmgf.onrender.com")
 GROQ_KEY  = os.environ.get("GROQ_API_KEY", "")
 INGEST    = f"{ENDPOINT}/v1/ingest"
