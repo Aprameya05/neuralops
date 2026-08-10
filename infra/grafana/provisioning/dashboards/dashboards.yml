@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: NeuralOps
+    orgId: 1
+    folder: NeuralOps
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
