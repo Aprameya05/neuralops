@@ -1,3 +1,4 @@
+import { getTraces, getAgentsSummary, getCostSummary, getSpansTimeseries } from '@/lib/api';
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -9,8 +10,8 @@ import CostChart from '@/components/CostChart';
 import TraceTable from '@/components/TraceTable';
 import LiveEventFeed from '@/components/LiveEventFeed';
 import { useFetch } from '@/lib/hooks';
-import { getTraces, getAgentsSummary, getCostSummary } from '@/lib/api';
 import { MOCK_SPANS_PER_MINUTE } from '@/lib/mock';
+
 
 export default function OverviewPage() {
   const [secondsAgo, setSecondsAgo] = useState(0);
@@ -23,7 +24,7 @@ export default function OverviewPage() {
   const { data: traces, loading: loadingTraces, refetch } = useFetch(getTraces);
   const { data: agents } = useFetch(getAgentsSummary);
   const { data: costSummary } = useFetch(getCostSummary);
-
+  const { data: spansTimeseries } = useFetch(getSpansTimeseries);
   const handleManualRefresh = () => {
     setSecondsAgo(0);
     refetch();
@@ -101,7 +102,7 @@ export default function OverviewPage() {
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SpanChart data={MOCK_SPANS_PER_MINUTE} />
+        <SpanChart data={spansTimeseries || MOCK_SPANS_PER_MINUTE} />
         <CostChart data={costChartData} />
       </div>
 

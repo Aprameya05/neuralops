@@ -1,5 +1,5 @@
 import { TraceSummary, CausalGraph, AgentSummary, CostSummaryItem, SpanSearchResult, ChainSearchResult, AnomalyAlert } from './types';
-import { MOCK_TRACES, getMockCausalReplay, MOCK_AGENTS, MOCK_COST_SERIES, MOCK_SEARCH_SPANS, MOCK_SEARCH_CHAINS, MOCK_ANOMALIES } from './mock';
+import { MOCK_TRACES, getMockCausalReplay, MOCK_AGENTS, MOCK_COST_SERIES, MOCK_SEARCH_SPANS, MOCK_SEARCH_CHAINS, MOCK_ANOMALIES, MOCK_SPANS_PER_MINUTE } from './mock';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -310,4 +310,14 @@ export async function getDriftAlerts(hours = 24): Promise<AnomalyAlert[]> {
     return MOCK_ANOMALIES;
   }
 }
-
+export async function getSpansTimeseries(minutes = 30): Promise<{ time: string; spans: number; errors: number }[]> {
+  try {
+    const data = await fetchWithRetry<{ time: string; spans: number; errors: number }[]>(
+      `${API_BASE}/v1/traces/spans/timeseries?minutes=${minutes}`
+    );
+    if (Array.isArray(data) && data.length > 0) return data;
+    return MOCK_SPANS_PER_MINUTE;
+  } catch {
+    return MOCK_SPANS_PER_MINUTE;
+  }
+}

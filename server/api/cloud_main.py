@@ -463,7 +463,29 @@ async def drift_alerts(hours: int = 1) -> list:
     )
     return [dict(r) for r in rows]
 
-
+@app.get("/v1/traces/spans/timeseries")
+async def spans_timeseries(minutes: int = 30) -> list:
+    rows = await _pg.fetch(
+        """
+        SELECT
+            date_trunc('minute', started_at) AS bucket,
+            count(*) AS spans,
+            count(*) FILTER (WHERE status = 'error') AS errors
+        FROM spans
+        WHERE started_at >= NOW() - INTERVAL '1 minute' * $1
+        GROUP BY bucket
+        ORDER BY bucket ASC
+        """,
+        minutes,
+    )
+    return [
+        {
+            "time": r["bucket"].strftime("%H:%M"),
+            "spans": r["spans"],
+            "errors": r["errors"],
+        }
+        for r in rows
+    ]
 # ---------------------------------------------------------------------------
 # Prometheus /metrics endpoint
 # ---------------------------------------------------------------------------
