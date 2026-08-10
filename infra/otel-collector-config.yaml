@@ -1,0 +1,154 @@
+# NeuralOps OpenTelemetry Collector Configuration
+#
+# This config makes NeuralOps a drop-in for any existing OTel pipeline.
+# Any agent already instrumented with OpenTelemetry sends spans here and
+# they flow into NeuralOps automatically -- no SDK changes required.
+#
+# Deploy with:
+#   docker run -p 4317:4317 -p 4318:4318 -p 8888:8888 \
+#     -v $(pwd)/otel-collector-config.yaml:/etc/otelcol/config.yaml \
+#     otel/opentelemetry-collector-contrib:latest
+#
+# Or via Docker Compose (see docker-compose.yml in project root).
+
+receivers:
+  # OTLP gRPC -- standard OTel receiver on port 4317
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        max_recv_msg_size_mib: 16
+      http:
+        endpoint: 0.0.0.0:4318
+        cors:
+          allowed_origins:
+            - "*"
+
+  # Prometheus scrape -- pull metrics from NeuralOps API
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: neuralops-api
+          scrape_interval: 30s
+          static_configs:
+            - targets: ["neuralops-api-cmgf.onrender.com"]
+          scheme: https
+          metrics_path: /metrics
+          scrape_timeout: 10s
+
+  # Host metrics -- CPU, memory, disk for the collector host
+  hostmetrics:
+    collection_interval: 60s
+    scrapers:
+      cpu:
+      memory:
+      disk:
+      network:
+
+processors:
+  # Batch spans before exporting -- reduces HTTP overhead
+  batch:
+    send_batch_size: 100
+    send_batch_max_size: 200
+    timeout: 2s
+
+  # Memory limiter -- prevents OOM on traffic spikes
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # Add resource attributes to every span
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: production
+        action: upsert
+      - key: collector.version
+        value: "1.0.0"
+        action: insert
+
+  # Transform span attributes to NeuralOps field names
+  transform:
+    trace_statements:
+      - context: span
+        statements:
+          # Map OTel semantic conventions to NeuralOps fields
+          - set(attributes["agent_id"], attributes["service.name"]) where attributes["agent_id"] == nil
+          - set(attributes["operation_name"], name) where attributes["operation_name"] == nil
+          - set(attributes["causal_chain_id"], trace_id) where attributes["causal_chain_id"] == nil
+
+exporters:
+  # NeuralOps HTTP exporter -- converts OTel spans to NeuralOps format
+  otlphttp/neuralops:
+    endpoint: https://neuralops-api-cmgf.onrender.com
+    headers:
+      content-type: application/json
+    sending_queue:
+      enabled: true
+      num_consumers: 4
+      queue_size: 1000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+  # Prometheus exporter -- expose collector metrics for scraping
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: otelcol
+    send_timestamps: true
+    metric_expiration: 180m
+
+  # Debug exporter -- prints spans to stdout in dev mode
+  debug:
+    verbosity: basic
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+  # File exporter -- archive spans to disk for replay/debugging
+  file/spans:
+    path: /tmp/neuralops-spans.jsonl
+    rotation:
+      max_megabytes: 100
+      max_days: 7
+      max_backups: 3
+
+extensions:
+  # Health check endpoint
+  health_check:
+    endpoint: 0.0.0.0:13133
+    path: /health
+
+  # pprof profiling endpoint
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+  # zPages -- live debug UI at http://localhost:55679/debug/tracez
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, pprof, zpages]
+
+  pipelines:
+    # Trace pipeline: OTel -> NeuralOps
+    traces:
+      receivers:  [otlp]
+      processors: [memory_limiter, resource, transform, batch]
+      exporters:  [otlphttp/neuralops, debug]
+
+    # Metrics pipeline: Prometheus pull + host metrics -> expose
+    metrics:
+      receivers:  [prometheus, hostmetrics]
+      processors: [memory_limiter, batch]
+      exporters:  [prometheus]
+
+  telemetry:
+    logs:
+      level: info
+      encoding: json
+    metrics:
+      level: detailed
+      address: 0.0.0.0:8888

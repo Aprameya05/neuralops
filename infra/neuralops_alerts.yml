@@ -1,0 +1,76 @@
+# NeuralOps Prometheus Alert Rules
+# Save alongside prometheus.yml as neuralops_alerts.yml
+
+groups:
+  - name: neuralops.spans
+    interval: 30s
+    rules:
+      # Alert if error rate exceeds 10% over 5 minutes
+      - alert: HighErrorRate
+        expr: neuralops_error_rate > 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NeuralOps error rate is high"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 10%)"
+
+      # Alert if error rate exceeds 25% over 2 minutes
+      - alert: CriticalErrorRate
+        expr: neuralops_error_rate > 0.25
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "NeuralOps critical error rate"
+          description: "Error rate is {{ $value | humanizePercentage }} -- immediate attention required"
+
+      # Alert if span ingestion drops to zero for 5 minutes
+      - alert: NoSpansIngested
+        expr: rate(neuralops_spans_ingested_total[5m]) == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No spans being ingested"
+          description: "NeuralOps has not received any spans in the last 5 minutes"
+
+      # Alert on cost spike -- more than $1 per hour
+      - alert: CostSpike
+        expr: rate(neuralops_cost_usd_total[1h]) > 1.0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM cost spike detected"
+          description: "Cost rate is ${{ $value }}/hour (threshold: $1/hour)"
+
+  - name: neuralops.latency
+    interval: 30s
+    rules:
+      # Alert on p99 latency over 5 seconds
+      - alert: HighLatencyP99
+        expr: histogram_quantile(0.99, rate(neuralops_span_latency_ms_bucket[5m])) > 5000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p99 span latency is high"
+          description: "p99 latency is {{ $value }}ms (threshold: 5000ms)"
+
+  - name: neuralops.agents
+    interval: 60s
+    rules:
+      # Recording rule -- active agents over last 5 minutes
+      - record: neuralops:active_agents:5m
+        expr: neuralops_active_agents
+
+      # Alert if active agents drops to zero
+      - alert: NoActiveAgents
+        expr: neuralops_active_agents == 0
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "No active agents"
+          description: "No agent activity detected in the last 5 minutes"

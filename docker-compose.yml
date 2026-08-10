@@ -1,70 +1,146 @@
-services:
+# NeuralOps Docker Compose -- Full Local Stack
+#
+# Services:
+#   - neuralops-api  : FastAPI ingestion server + consumer (port 8000)
+#   - otel-collector : OpenTelemetry collector (ports 4317, 4318)
+#   - prometheus     : Metrics scraping (port 9090)
+#   - grafana        : Metrics visualization (port 3001)
+#   - redis          : Span queue (port 6379)
+#
+# Usage:
+#   cp .env.example .env          # fill in POSTGRES_URL
+#   docker compose up -d
+#   python scripts/seed_production_data.py  # populate with real spans
+#   open http://localhost:3000              # dashboard
+#   open http://localhost:9090              # prometheus
+#   open http://localhost:3001              # grafana
 
-  kafka:
-    image: confluentinc/cp-kafka:7.6.1
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:29092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      CLUSTER_ID: "VR0obFiKTpetOPE9GchI1g"
-    ports:
-      - "9092:9092"
-      - "29092:29092"
-    healthcheck:
-      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+version: "3.9"
 
-  clickhouse:
-    image: clickhouse/clickhouse-server:24.4
-    environment:
-      CLICKHOUSE_DB: neuralops
-      CLICKHOUSE_USER: neuralops
-      CLICKHOUSE_PASSWORD: neuralops
-    ports:
-      - "8123:8123"
-      - "9000:9000"
-    volumes:
-      - clickhouse_data:/var/lib/clickhouse
-      - ./server/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
-    healthcheck:
-      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: neuralops
-      POSTGRES_USER: neuralops
-      POSTGRES_PASSWORD: neuralops
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U neuralops"]
-      interval: 5s
-      retries: 10
-
-  redis:
-    image: redis:7.2-alpine
-    ports:
-      - "6379:6379"
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      retries: 10
+networks:
+  neuralops:
+    driver: bridge
 
 volumes:
-  clickhouse_data:
-  postgres_data:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+
+services:
+  # ---------------------------------------------------------------------------
+  # Redis -- span queue (Upstash-compatible)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: neuralops-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - neuralops
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # NeuralOps API -- FastAPI + Redis consumer
+  # ---------------------------------------------------------------------------
+  neuralops-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: neuralops-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"   # HTTP REST + WebSocket
+      - "50051:50051" # gRPC ingestion
+    environment:
+      REDIS_URL:    ${REDIS_URL:-redis://redis:6379}
+      POSTGRES_URL: ${POSTGRES_URL}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - neuralops
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry Collector
+  # ---------------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: neuralops-otel-collector
+    restart: unless-stopped
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8888:8888"   # Collector metrics
+      - "8889:8889"   # Pipeline metrics (Prometheus)
+      - "13133:13133" # Health check
+      - "55679:55679" # zPages debug UI
+    volumes:
+      - ./infra/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    depends_on:
+      neuralops-api:
+        condition: service_healthy
+    networks:
+      - neuralops
+
+  # ---------------------------------------------------------------------------
+  # Prometheus
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: neuralops-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/neuralops_alerts.yml:/etc/prometheus/neuralops_alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
+    networks:
+      - neuralops
+
+  # ---------------------------------------------------------------------------
+  # Grafana
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: neuralops-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER:     admin
+      GF_SECURITY_ADMIN_PASSWORD: neuralops
+      GF_USERS_ALLOW_SIGN_UP:     "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/neuralops.json
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - neuralops
