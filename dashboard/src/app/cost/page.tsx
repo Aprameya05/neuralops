@@ -13,9 +13,15 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { useFetch } from '@/lib/hooks';
-import { getCostSummary } from '@/lib/api';
+import { getCostSummary, getCostForecast, CostForecastPoint } from '@/lib/api';
 import { formatCost } from '@/lib/utils';
 import { CostSummaryItem } from '@/lib/types';
+import {
+  ComposedChart,
+  Line,
+  ReferenceLine,
+  Legend,
+} from 'recharts';
 
 type SortField = 'agent_id' | 'model' | 'calls' | 'tokens' | 'cost_usd';
 
@@ -27,6 +33,11 @@ export default function CostPage() {
   const { data: rawCostData, loading } = useFetch(
     () => getCostSummary(timeRange),
     [timeRange]
+  );
+
+  const { data: forecastData, loading: forecastLoading } = useFetch(
+    () => getCostForecast(24),
+    []
   );
 
   const costData = rawCostData || [];
@@ -227,6 +238,49 @@ export default function CostPage() {
           </table>
         </div>
       </div>
+
+      {/* Cost Forecast Panel */}
+      {forecastData && forecastData.length > 0 && (
+        <div className="bg-[#0f0f0f] border border-[#1a1a1a] rounded-2xl p-6 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-[#f5f5f5]">24-Hour Cost Forecast</h3>
+            <p className="text-xs text-[#737373] mt-0.5">Exponential smoothing · 90% confidence interval</p>
+          </div>
+          <div className="h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart
+                data={forecastData.slice(-48).map(p => ({
+                  hour: p.hour.slice(11, 16),
+                  actual: p.actual,
+                  forecast: p.forecast,
+                  lower: p.lower,
+                  upper: p.upper,
+                  isFuture: p.actual === null,
+                }))}
+                margin={{ top: 5, right: 10, left: -10, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient id="forecastGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1a1a1a" vertical={false} />
+                <XAxis dataKey="hour" stroke="#404040" fontSize={10} tick={{ fill: '#404040', fontFamily: 'monospace' }} interval={3} />
+                <YAxis stroke="#404040" fontSize={10} tickFormatter={(v) => `$${v.toFixed(5)}`} tick={{ fill: '#404040', fontFamily: 'monospace' }} width={80} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#141414', borderColor: '#1a1a1a', borderRadius: '8px', color: '#f5f5f5', fontSize: '11px', fontFamily: 'monospace' }}
+                  formatter={(val: any, name: string) => [`$${Number(val).toFixed(6)}`, name]}
+                />
+                <Area type="monotone" dataKey="upper" fill="url(#forecastGrad)" stroke="none" />
+                <Area type="monotone" dataKey="lower" fill="#080808" stroke="none" />
+                <Line type="monotone" dataKey="actual" stroke="#10b981" strokeWidth={2} dot={false} name="Actual" />
+                <Line type="monotone" dataKey="forecast" stroke="#6366f1" strokeWidth={1.5} strokeDasharray="4 2" dot={false} name="Forecast" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {/* Total Spend Banner at Bottom */}
       <div className="bg-[#0f0f0f] border border-[#6366f140] shadow-[0_0_20px_rgba(99,102,241,0.1)] rounded-2xl p-6 flex items-center justify-between">

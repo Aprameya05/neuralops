@@ -1,0 +1,40 @@
+name: Seed Production Data
+
+on:
+  schedule:
+    # Every 6 hours — keeps the dashboard live for recruiters
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    # Also triggerable manually from GitHub Actions UI
+
+jobs:
+  seed:
+    name: Run production seeder
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install httpx groq python-dotenv asyncpg redis
+
+      - name: Run seeder
+        env:
+          GROQ_API_KEY:      ${{ secrets.GROQ_API_KEY }}
+          POSTGRES_URL:      ${{ secrets.POSTGRES_URL }}
+          REDIS_URL:         ${{ secrets.REDIS_URL }}
+          NEURALOPS_API_URL: ${{ secrets.NEURALOPS_API_URL || 'https://neuralops-api-cmgf.onrender.com' }}
+        run: |
+          python scripts/seed_production_data.py
+
+      - name: Log completion
+        run: echo "Seeder completed at $(date -u '+%Y-%m-%dT%H:%M:%SZ')"

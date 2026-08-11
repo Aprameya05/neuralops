@@ -310,6 +310,240 @@ export async function getDriftAlerts(hours = 24): Promise<AnomalyAlert[]> {
     return MOCK_ANOMALIES;
   }
 }
+// ── Attribution ──────────────────────────────────────────────────────────────
+
+export interface AttributionCause {
+  span_id: string;
+  operation_name: string;
+  agent_id: string;
+  status: string;
+  duration_ms: number;
+  attribution_score: number;
+  temporal_score: number;
+  error_score: number;
+  latency_score: number;
+  centrality_score: number;
+  descendant_count: number;
+  explanation: string;
+}
+
+export interface AttributionReport {
+  causal_chain_id: string;
+  error_span_id: string | null;
+  error_operation: string | null;
+  total_spans: number;
+  confidence: number;
+  summary: string;
+  root_cause: AttributionCause | null;
+  ranked_causes: AttributionCause[];
+}
+
+export async function getCausalAttribution(chainId: string, errorSpanId?: string): Promise<AttributionReport | null> {
+  try {
+    const url = errorSpanId
+      ? `${API_BASE}/v1/traces/${chainId}/attribution?error_span_id=${errorSpanId}`
+      : `${API_BASE}/v1/traces/${chainId}/attribution`;
+    return await fetchWithRetry<AttributionReport>(url);
+  } catch {
+    return null;
+  }
+}
+
+// ── Trace Diff ───────────────────────────────────────────────────────────────
+
+export interface OpDiff {
+  operation_name: string;
+  in_a: boolean;
+  in_b: boolean;
+  latency_a_ms: number | null;
+  latency_b_ms: number | null;
+  delta_ms: number | null;
+  delta_pct: number | null;
+  status_a: string | null;
+  status_b: string | null;
+  status_changed: boolean;
+}
+
+export interface TraceDiffReport {
+  chain_a: string;
+  chain_b: string;
+  divergence_score: number;
+  first_divergence_op: string | null;
+  only_in_a: string[];
+  only_in_b: string[];
+  common_ops: string[];
+  operations: OpDiff[];
+  summary: string;
+}
+
+export async function getTraceDiff(chainA: string, chainB: string): Promise<TraceDiffReport | null> {
+  try {
+    return await fetchWithRetry<TraceDiffReport>(
+      `${API_BASE}/v1/traces/${chainA}/diff?compare_to=${chainB}`
+    );
+  } catch {
+    return null;
+  }
+}
+
+// ── Agent Fingerprint ─────────────────────────────────────────────────────────
+
+export interface AgentFingerprint {
+  agent_id: string;
+  agent_framework: string;
+  archetype: string;
+  total_spans: number;
+  total_chains: number;
+  avg_latency_ms: number;
+  p95_latency_ms: number;
+  error_rate: number;
+  tool_affinity: number;
+  avg_cost_per_span: number;
+  spans_per_chain: number;
+  top_operations: { op: string; fraction: number }[];
+  signature: number[];
+}
+
+export interface AgentSimilarity {
+  agent_a: string;
+  agent_b: string;
+  similarity: number;
+  shared_ops: string[];
+  explanation: string;
+}
+
+export interface AgentCluster {
+  cluster_id: number;
+  archetype: string;
+  agents: string[];
+  cohesion: number;
+  description: string;
+}
+
+export interface FingerprintReport {
+  summary: string;
+  fingerprints: AgentFingerprint[];
+  similarities: AgentSimilarity[];
+  clusters: AgentCluster[];
+}
+
+export async function getAgentFingerprints(hours = 24): Promise<FingerprintReport | null> {
+  try {
+    return await fetchWithRetry<FingerprintReport>(`${API_BASE}/v1/agents/fingerprint?hours=${hours}`);
+  } catch {
+    return null;
+  }
+}
+
+// ── Cost Forecast ─────────────────────────────────────────────────────────────
+
+export interface CostForecastPoint {
+  hour: string;
+  actual: number | null;
+  forecast: number;
+  lower: number;
+  upper: number;
+}
+
+export async function getCostForecast(hoursAhead = 24): Promise<CostForecastPoint[]> {
+  try {
+    const data = await fetchWithRetry<CostForecastPoint[]>(
+      `${API_BASE}/v1/traces/cost/forecast?hours_ahead=${hoursAhead}`
+    );
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+// ── Hallucination Risk ────────────────────────────────────────────────────────
+
+export interface HallucinationRisk {
+  causal_chain_id: string;
+  high_risk_spans: { span_id: string; operation_name: string; risk_score: number; reason: string }[];
+  avg_risk: number;
+  model_trained: boolean;
+}
+
+export async function getHallucinationRisk(chainId: string): Promise<HallucinationRisk | null> {
+  try {
+    return await fetchWithRetry<HallucinationRisk>(`${API_BASE}/v1/traces/${chainId}/hallucination_risk`);
+  } catch {
+    return null;
+  }
+}
+
+// ── Decision Explainer ────────────────────────────────────────────────────────
+
+export interface SpanExplanation {
+  span_id: string;
+  explanation: string;
+  key_factors: string[];
+  confidence: number;
+}
+
+export async function explainSpan(spanId: string, context: Record<string, any>): Promise<SpanExplanation | null> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/spans/${spanId}/explain`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(context),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.ok) return await res.json();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ── Prompt Mutation Lab ───────────────────────────────────────────────────────
+
+export interface PromptVariant {
+  label: string;
+  prompt: string;
+  predicted_quality: number;
+  predicted_tokens: number;
+  rationale: string;
+}
+
+export async function mutatePrompt(spanId: string, originalPrompt: string): Promise<PromptVariant[]> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/spans/${spanId}/mutate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: originalPrompt }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (res.ok) return await res.json();
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+// ── Time Travel ───────────────────────────────────────────────────────────────
+
+export interface TimeTravelResult {
+  original_chain_id: string;
+  counterfactual_id: string;
+  changed_span_id: string;
+  changed_operation: string;
+  original_outcome: string;
+  counterfactual_outcome: string;
+  explanation: string;
+  would_have_succeeded: boolean;
+  confidence: number;
+}
+
+export async function getTimeTravelAnalysis(chainId: string): Promise<TimeTravelResult | null> {
+  try {
+    return await fetchWithRetry<TimeTravelResult>(`${API_BASE}/v1/traces/${chainId}/time_travel`);
+  } catch {
+    return null;
+  }
+}
+
 export async function getSpansTimeseries(minutes = 30): Promise<{ time: string; spans: number; errors: number }[]> {
   try {
     const data = await fetchWithRetry<{ time: string; spans: number; errors: number }[]>(

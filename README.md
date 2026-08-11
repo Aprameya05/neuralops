@@ -6,7 +6,7 @@
 &nbsp;
 <img src="https://img.shields.io/github/actions/workflow/status/Aprameya05/neuralops/benchmark.yml?style=for-the-badge&label=Benchmark+CI&labelColor=0a0a0a&color=10b981" alt="CI"/>
 &nbsp;
-<img src="https://img.shields.io/badge/NeuralOps-v0.2.0-6366f1?style=for-the-badge&labelColor=0a0a0a" alt="version"/>
+<img src="https://img.shields.io/badge/NeuralOps-v0.3.0-6366f1?style=for-the-badge&labelColor=0a0a0a" alt="version"/>
 &nbsp;
 <img src="https://img.shields.io/badge/License-Apache_2.0-6366f1?style=for-the-badge&labelColor=0a0a0a" alt="license"/>
 &nbsp;
@@ -70,6 +70,16 @@ NeuralOps closes that gap.
 | Semantic search over traces | No | No | **Yes** |
 | LLM-as-judge eval | No | Yes | **Yes** |
 | Multi-LLM benchmark arena | No | No | **Yes** |
+| Root cause attribution scoring | No | No | **Yes** |
+| Trace diff (git diff for agents) | No | No | **Yes** |
+| Agent fingerprinting + clustering | No | No | **Yes** |
+| Agent genealogy force graph | No | No | **Yes** |
+| Time-travel counterfactual debugger | No | No | **Yes** |
+| Prompt mutation lab (5 auto-variants) | No | No | **Yes** |
+| 24h cost forecasting w/ CI | Partial | No | **Yes** |
+| Hallucination risk prediction | No | Partial | **Yes** |
+| Auto-firing Slack/PagerDuty alerts | Yes | No | **Yes** |
+| LangGraph / AutoGen / CrewAI auto-instr. | No | Partial | **Yes** |
 | gRPC ingestion endpoint | No | No | **Yes** |
 | OpenTelemetry collector config | Yes | No | **Yes** |
 | Built-in real AI agents | No | No | **Yes** |
